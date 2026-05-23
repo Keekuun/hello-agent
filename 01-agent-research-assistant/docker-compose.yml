@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      - DATABASE_PATH=/data/agent.db
+    volumes:
+      - agent-data:/app/server/data
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      - server
+
+volumes:
+  agent-data:

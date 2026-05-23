@@ -14,14 +14,15 @@ export class ReActEngine {
 
   async run(
     task: string,
-    onProgress?: (step: ReActStep) => void
+    onProgress?: (step: ReActStep) => void,
+    memoryContext?: string
   ): Promise<string> {
     const steps: ReActStep[] = [];
 
     for (let i = 0; i < this.maxIterations; i++) {
       console.log(`\n--- 迭代 ${i + 1}/${this.maxIterations} ---`);
 
-      const step = await this.generateStep(task, steps);
+      const step = await this.generateStep(task, steps, memoryContext);
       steps.push(step);
 
       console.log(`💭 思考: ${step.thought}`);
@@ -58,9 +59,10 @@ export class ReActEngine {
 
   private async generateStep(
     task: string,
-    previousSteps: ReActStep[]
+    previousSteps: ReActStep[],
+    memoryContext?: string
   ): Promise<ReActStep> {
-    const prompt = this.buildPrompt(task, previousSteps);
+    const prompt = this.buildPrompt(task, previousSteps, memoryContext);
     const response = await this.config.llm.generate(prompt, {
       temperature: this.config.temperature ?? 0.7,
     });
@@ -68,7 +70,7 @@ export class ReActEngine {
     return this.parseResponse(response);
   }
 
-  private buildPrompt(task: string, previousSteps: ReActStep[]): string {
+  private buildPrompt(task: string, previousSteps: ReActStep[], memoryContext?: string): string {
     const toolsDescription = this.tools.getDescription();
 
     const history = previousSteps
@@ -95,6 +97,7 @@ export class ReActEngine {
 
 可用工具：
 ${toolsDescription}
+${memoryContext || ''}
 
 【重要】你必须严格按照以下格式输出，每次只输出一步：
 

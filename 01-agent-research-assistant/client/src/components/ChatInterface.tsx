@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingMarkdown } from './StreamingMarkdown';
+import type { Skill } from '../hooks/useAgent';
 
 export interface AgentStep {
   thought: string;
@@ -20,9 +21,95 @@ interface Message {
 
 interface ChatInterfaceProps {
   sessionId: string | null;
-  createSession: () => Promise<string | null>;
+  createSession: (title?: string) => Promise<string | null>;
   onStepsChange: (steps: AgentStep[]) => void;
   onLoadingChange: (loading: boolean) => void;
+  selectedSkill?: Skill | null;
+  onSkillUsed?: () => void;
+  onSessionUpdate?: () => void;
+}
+
+const messageCache = new Map<string, Message[]>();
+
+function CopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = content;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      title="复制内容"
+    >
+      {copied ? (
+        <>
+          <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-green-500">已复制</span>
+        </>
+      ) : (
+        <>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span>复制</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function ExportButton({ messages }: { messages: Message[] }) {
+  const handleExportMarkdown = () => {
+    const md = messages.map(msg => {
+      const time = new Date(msg.timestamp).toLocaleString('zh-CN');
+      if (msg.role === 'user') {
+        return `## 用户\n*${time}*\n\n${msg.content}\n`;
+      } else {
+        return `## 助手\n*${time}*\n\n${msg.content}\n`;
+      }
+    }).join('\n---\n\n');
+
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `对话记录_${new Date().toLocaleDateString('zh-CN')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (messages.length === 0) return null;
+
+  return (
+    <button
+      onClick={handleExportMarkdown}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      title="导出为 Markdown"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      <span>导出</span>
+    </button>
+  );
 }
 
 function StepItem({ step, index }: { step: AgentStep; index: number }) {
@@ -212,6 +299,9 @@ export function ChatInterface({
   createSession,
   onStepsChange,
   onLoadingChange,
+  selectedSkill,
+  onSkillUsed,
+  onSessionUpdate,
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -220,18 +310,77 @@ export function ChatInterface({
   const [pendingSteps, setPendingSteps] = useState<AgentStep[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [isSwitchingSession, setIsSwitchingSession] = useState(false);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const isLoadingSessionRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
+  const loadMessages = useCallback(async (sid: string) => {
+    if (messageCache.has(sid)) {
+      setMessages(messageCache.get(sid)!);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/sessions/${sid}/history`);
+      const history = await res.json();
+      
+      if (Array.isArray(history) && history.length > 0) {
+        const formattedMessages: Message[] = history.map((msg, i) => ({
+          id: `history-${sid}-${i}`,
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp || new Date().toISOString(),
+        }));
+        setMessages(formattedMessages);
+        messageCache.set(sid, formattedMessages);
+      } else {
+        setMessages([]);
+        messageCache.set(sid, []);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch history:', err);
+      setMessages([]);
+    }
+  }, []);
+
   useEffect(() => {
-    void createSession();
-  }, [createSession]);
+    if (sessionId && sessionId !== currentSessionIdRef.current && !isLoadingSessionRef.current) {
+      isLoadingSessionRef.current = true;
+      setIsSwitchingSession(true);
+      
+      setPendingAnswer(null);
+      setPendingSteps([]);
+      setIsTyping(false);
+      
+      loadMessages(sessionId).finally(() => {
+        currentSessionIdRef.current = sessionId;
+        isLoadingSessionRef.current = false;
+        
+        requestAnimationFrame(() => {
+          scrollContainerRef.current?.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: 'instant'
+          });
+          setTimeout(() => setIsSwitchingSession(false), 150);
+        });
+      });
+    }
+  }, [sessionId, loadMessages]);
 
   useEffect(() => {
     onLoadingChange(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  useEffect(() => {
+    if (selectedSkill && sessionId) {
+      setInput(selectedSkill.prompt);
+      onSkillUsed?.();
+    }
+  }, [selectedSkill, sessionId, onSkillUsed]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
@@ -267,7 +416,7 @@ export function ChatInterface({
   }, [checkScrollPosition]);
 
   useEffect(() => {
-    if (isAutoScrollRef.current) {
+    if (isAutoScrollRef.current && !isLoadingSessionRef.current) {
       scrollToBottom();
     }
   }, [messages, pendingAnswer, pendingSteps, isLoading, isTyping, scrollToBottom]);
@@ -284,11 +433,18 @@ export function ChatInterface({
       steps,
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, assistantMessage]);
+    setMessages((prev) => {
+      const updated = [...prev, assistantMessage];
+      if (currentSessionIdRef.current) {
+        messageCache.set(currentSessionIdRef.current, updated);
+      }
+      return updated;
+    });
     setPendingAnswer(null);
     setPendingSteps([]);
     setIsTyping(false);
-  }, []);
+    onSessionUpdate?.();
+  }, [onSessionUpdate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,7 +459,13 @@ export function ChatInterface({
       timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => {
+      const updated = [...prev, userMessage];
+      if (currentSessionIdRef.current) {
+        messageCache.set(currentSessionIdRef.current, updated);
+      }
+      return updated;
+    });
     setInput('');
     setIsLoading(true);
     setPendingAnswer(null);
@@ -389,35 +551,56 @@ export function ChatInterface({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: `出错了: ${message}`,
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      const errorMsg: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `出错了: ${message}`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
       setIsLoading(false);
     }
   };
 
   return (
-    <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border bg-white shadow-sm">
+    <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border bg-white shadow-sm overflow-hidden">
+      {messages.length > 0 && (
+        <div className={`flex items-center justify-between border-b px-4 py-2 bg-white shrink-0 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
+          <span className="text-xs text-slate-400">
+            {messages.length} 条消息
+          </span>
+          <div className="flex items-center gap-3">
+            <CopyButton content={messages.map(m => `${m.role === 'user' ? '用户' : '助手'}: ${m.content}`).join('\n\n')} />
+            <ExportButton messages={messages} />
+          </div>
+        </div>
+      )}
+
       <div
         ref={scrollContainerRef}
-        className="flex-1 space-y-4 overflow-y-auto p-4"
+        className={`flex-1 overflow-y-auto transition-opacity duration-150 ${isSwitchingSession ? 'scrollbar-hidden' : ''}`}
         onScroll={handleScroll}
       >
-        <AnimatePresence mode="popLayout">
-          {messages.map((msg) => (
-            <motion.div
+        <div className={`p-4 space-y-4 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
+          {messages.length === 0 && !isLoading && !isSwitchingSession && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center animate-fade-in">
+              <div className="text-4xl mb-4">🤖</div>
+              <h3 className="text-lg font-medium text-slate-700 mb-2">
+                智能研究助手
+              </h3>
+              <p className="text-sm text-slate-500 max-w-md">
+                输入任何问题，我会自动搜索、分析并给出详细答案。
+                <br />
+                也可以从右侧「技能库」选择预设技能开始。
+              </p>
+            </div>
+          )}
+
+          {messages.map((msg, index) => (
+            <div
               key={msg.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+              style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
             >
               <div
                 className={`max-w-[85%] ${
@@ -434,6 +617,10 @@ export function ChatInterface({
                       <StepsProcess steps={msg.steps} isRunning={false} />
                     )}
                     <div className="rounded-lg bg-slate-50 px-4 py-3 text-slate-900 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-slate-400">Agent 回复</span>
+                        <CopyButton content={msg.content} />
+                      </div>
                       <div className="prose prose-sm max-w-none">
                         <MarkdownRenderer content={msg.content} />
                       </div>
@@ -444,51 +631,47 @@ export function ChatInterface({
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {(isLoading || pendingAnswer) && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex justify-start"
-          >
-            <div className="max-w-[85%] space-y-2 w-full">
-              {(pendingSteps.length > 0 || isLoading) && (
-                <StepsProcess steps={pendingSteps} isRunning={isLoading && !pendingAnswer} />
-              )}
-              {pendingAnswer && (
-                <div className="rounded-lg bg-slate-50 px-4 py-3 text-slate-900 shadow-sm">
-                  {isTyping ? (
-                    <StreamingMarkdown
-                      content={pendingAnswer}
-                      speed={5}
-                      onComplete={handleTypewriterComplete}
-                    />
-                  ) : (
-                    <>
-                      <div className="prose prose-sm max-w-none">
-                        <MarkdownRenderer content={pendingAnswer} />
-                      </div>
-                      <button
-                        onClick={() => finalizeMessage(pendingAnswer, pendingSteps)}
-                        className="mt-3 text-xs text-blue-500 hover:text-blue-700"
-                      >
-                        ✓ 完成
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
-          </motion.div>
-        )}
+          ))}
 
-        <div ref={messagesEndRef} />
+          {(isLoading || pendingAnswer) && (
+            <div className="flex justify-start animate-fade-in">
+              <div className="max-w-[85%] space-y-2 w-full">
+                {(pendingSteps.length > 0 || isLoading) && (
+                  <StepsProcess steps={pendingSteps} isRunning={isLoading && !pendingAnswer} />
+                )}
+                {pendingAnswer && (
+                  <div className="rounded-lg bg-slate-50 px-4 py-3 text-slate-900 shadow-sm">
+                    {isTyping ? (
+                      <StreamingMarkdown
+                        content={pendingAnswer}
+                        speed={5}
+                        onComplete={handleTypewriterComplete}
+                      />
+                    ) : (
+                      <>
+                        <div className="prose prose-sm max-w-none">
+                          <MarkdownRenderer content={pendingAnswer} />
+                        </div>
+                        <button
+                          onClick={() => finalizeMessage(pendingAnswer, pendingSteps)}
+                          className="mt-3 text-xs text-blue-500 hover:text-blue-700"
+                        >
+                          ✓ 完成
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      <div className="relative border-t p-4">
+      <div className="relative border-t p-4 bg-white shrink-0">
         <AnimatePresence>
           {showScrollButton && (
             <motion.button
@@ -500,17 +683,8 @@ export function ChatInterface({
               className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500 text-white text-xs shadow-lg hover:bg-blue-600 transition-colors"
               title="滚动到底部"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3.5 w-3.5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                  clipRule="evenodd"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
               <span>回到底部</span>
             </motion.button>

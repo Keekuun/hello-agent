@@ -31,7 +31,7 @@ interface ChatInterfaceProps {
 
 const messageCache = new Map<string, Message[]>();
 
-function CopyButton({ content }: { content: string }) {
+function CopyButton({ content, className = '' }: { content: string; className?: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -54,7 +54,7 @@ function CopyButton({ content }: { content: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      className={`flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors ${className}`}
       title="复制内容"
     >
       {copied ? (
@@ -101,7 +101,7 @@ function ExportButton({ messages }: { messages: Message[] }) {
   return (
     <button
       onClick={handleExportMarkdown}
-      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
       title="导出为 Markdown"
     >
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -152,9 +152,9 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
   };
 
   return (
-    <div className="border-l-2 border-slate-200 pl-3 py-1">
+    <div className="border-l-2 border-slate-200 dark:border-slate-600 pl-3 py-1">
       <div
-        className="flex items-start gap-2 cursor-pointer hover:bg-slate-100 rounded p-1.5 -ml-1 transition-colors"
+        className="flex items-start gap-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded p-1.5 -ml-1 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <span className="text-slate-400 text-xs mt-0.5 shrink-0">
@@ -162,19 +162,19 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-medium text-slate-500">步骤 {index + 1}</span>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">步骤 {index + 1}</span>
             {step.action && (
-              <span className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-1 text-xs bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
                 {getToolIcon(step.action.tool)} {getToolName(step.action.tool)}
               </span>
             )}
             {step.finalAnswer && (
-              <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-600 px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center gap-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded">
                 ✅ 完成
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-600 mt-0.5 line-clamp-1">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-1">
             {step.thought}
           </p>
         </div>
@@ -190,35 +190,35 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
             className="overflow-hidden"
           >
             <div className="mt-2 ml-4 space-y-2 text-xs overflow-hidden">
-              <div className="bg-slate-100 rounded p-2">
-                <div className="font-medium text-slate-500 mb-1">💭 思考</div>
-                <p className="text-slate-700 break-words">{step.thought}</p>
+              <div className="bg-slate-100 dark:bg-slate-700 rounded p-2">
+                <div className="font-medium text-slate-500 dark:text-slate-400 mb-1">💭 思考</div>
+                <p className="text-slate-700 dark:text-slate-300 break-words">{step.thought}</p>
               </div>
 
               {step.action && (
-                <div className="bg-blue-50 rounded p-2">
-                  <div className="font-medium text-blue-500 mb-1">
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2">
+                  <div className="font-medium text-blue-500 dark:text-blue-400 mb-1">
                     {getToolIcon(step.action.tool)} 调用工具: {getToolName(step.action.tool)}
                   </div>
-                  <pre className="text-blue-700 whitespace-pre-wrap break-all text-xs overflow-hidden">
+                  <pre className="text-blue-700 dark:text-blue-300 whitespace-pre-wrap break-all text-xs overflow-hidden">
                     {JSON.stringify(step.action.input, null, 2)}
                   </pre>
                 </div>
               )}
 
               {step.observation !== undefined && (
-                <div className="bg-amber-50 rounded p-2">
-                  <div className="font-medium text-amber-500 mb-1">👁️ 观察结果</div>
-                  <p className="text-amber-700 whitespace-pre-wrap break-words">
+                <div className="bg-amber-50 dark:bg-amber-900/20 rounded p-2">
+                  <div className="font-medium text-amber-500 dark:text-amber-400 mb-1">👁️ 观察结果</div>
+                  <p className="text-amber-700 dark:text-amber-300 whitespace-pre-wrap break-words">
                     {formatObservation(step.observation)}
                   </p>
                 </div>
               )}
 
               {step.finalAnswer && (
-                <div className="bg-green-50 rounded p-2">
-                  <div className="font-medium text-green-500 mb-1">✅ 最终答案</div>
-                  <p className="text-green-700 line-clamp-3 break-words">{step.finalAnswer}</p>
+                <div className="bg-green-50 dark:bg-green-900/20 rounded p-2">
+                  <div className="font-medium text-green-500 dark:text-green-400 mb-1">✅ 最终答案</div>
+                  <p className="text-green-700 dark:text-green-300 line-clamp-3 break-words">{step.finalAnswer}</p>
                 </div>
               )}
             </div>
@@ -238,11 +238,11 @@ function StepsProcess({ steps, isRunning }: { steps: AgentStep[]; isRunning: boo
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden"
+      className="bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-100 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
       >
         <div className="flex items-center gap-2">
           {isRunning ? (
@@ -254,7 +254,7 @@ function StepsProcess({ steps, isRunning }: { steps: AgentStep[]; isRunning: boo
           ) : (
             <span className="text-green-500 text-xs">✓</span>
           )}
-          <span className="text-xs font-medium text-slate-600">
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
             {isRunning ? 'Agent 正在思考...' : `已完成 ${steps.length} 个步骤`}
           </span>
         </div>
@@ -313,6 +313,7 @@ export function ChatInterface({
   const [isSwitchingSession, setIsSwitchingSession] = useState(false);
   const currentSessionIdRef = useRef<string | null>(null);
   const isLoadingSessionRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -379,8 +380,21 @@ export function ChatInterface({
     if (selectedSkill && sessionId) {
       setInput(selectedSkill.prompt);
       onSkillUsed?.();
+      inputRef.current?.focus();
     }
   }, [selectedSkill, sessionId, onSkillUsed]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
@@ -445,6 +459,21 @@ export function ChatInterface({
     setIsTyping(false);
     onSessionUpdate?.();
   }, [onSessionUpdate]);
+
+  const handleResend = useCallback((content: string) => {
+    setInput(content);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);
+    }
+    if (e.key === 'Escape') {
+      setInput('');
+    }
+  }, [input, sessionId, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -563,9 +592,9 @@ export function ChatInterface({
   };
 
   return (
-    <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border bg-white shadow-sm overflow-hidden">
+    <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       {messages.length > 0 && (
-        <div className={`flex items-center justify-between border-b px-4 py-2 bg-white shrink-0 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-2 bg-white dark:bg-slate-900 shrink-0 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
           <span className="text-xs text-slate-400">
             {messages.length} 条消息
           </span>
@@ -584,22 +613,34 @@ export function ChatInterface({
         <div className={`p-4 space-y-4 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
           {messages.length === 0 && !isLoading && !isSwitchingSession && (
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center animate-fade-in">
-              <div className="text-4xl mb-4">🤖</div>
-              <h3 className="text-lg font-medium text-slate-700 mb-2">
+              <div className="text-5xl mb-4">🤖</div>
+              <h3 className="text-lg font-medium text-slate-700 dark:text-slate-200 mb-2">
                 智能研究助手
               </h3>
-              <p className="text-sm text-slate-500 max-w-md">
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mb-6">
                 输入任何问题，我会自动搜索、分析并给出详细答案。
-                <br />
-                也可以从右侧「技能库」选择预设技能开始。
               </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <kbd className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-600 text-slate-500">
+                  Enter
+                </kbd>
+                <span className="text-xs text-slate-400">发送</span>
+                <kbd className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-600 text-slate-500">
+                  Shift+Enter
+                </kbd>
+                <span className="text-xs text-slate-400">换行</span>
+                <kbd className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-600 text-slate-500">
+                  /
+                </kbd>
+                <span className="text-xs text-slate-400">聚焦输入框</span>
+              </div>
             </div>
           )}
 
           {messages.map((msg, index) => (
             <div
               key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in group`}
               style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
             >
               <div
@@ -610,24 +651,33 @@ export function ChatInterface({
                 }`}
               >
                 {msg.role === 'user' ? (
-                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                  <div className="relative">
+                    <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                    <button
+                      onClick={() => handleResend(msg.content)}
+                      className="absolute -bottom-5 right-0 opacity-0 group-hover:opacity-100 text-xs text-blue-200 hover:text-white transition-opacity"
+                      title="重新发送"
+                    >
+                      🔄 重新发送
+                    </button>
+                  </div>
                 ) : (
                   <>
                     {msg.steps && msg.steps.length > 0 && (
                       <StepsProcess steps={msg.steps} isRunning={false} />
                     )}
-                    <div className="rounded-lg bg-slate-50 px-4 py-3 text-slate-900 shadow-sm">
+                    <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-slate-400">Agent 回复</span>
                         <CopyButton content={msg.content} />
                       </div>
-                      <div className="prose prose-sm max-w-none">
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
                         <MarkdownRenderer content={msg.content} />
                       </div>
                     </div>
                   </>
                 )}
-                <span className={`block text-xs ${msg.role === 'user' ? 'text-blue-200 text-right' : 'text-slate-400'}`}>
+                <span className={`block text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200 text-right' : 'text-slate-400'}`}>
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </span>
               </div>
@@ -641,7 +691,7 @@ export function ChatInterface({
                   <StepsProcess steps={pendingSteps} isRunning={isLoading && !pendingAnswer} />
                 )}
                 {pendingAnswer && (
-                  <div className="rounded-lg bg-slate-50 px-4 py-3 text-slate-900 shadow-sm">
+                  <div className="rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100 shadow-sm">
                     {isTyping ? (
                       <StreamingMarkdown
                         content={pendingAnswer}
@@ -650,12 +700,12 @@ export function ChatInterface({
                       />
                     ) : (
                       <>
-                        <div className="prose prose-sm max-w-none">
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
                           <MarkdownRenderer content={pendingAnswer} />
                         </div>
                         <button
                           onClick={() => finalizeMessage(pendingAnswer, pendingSteps)}
-                          className="mt-3 text-xs text-blue-500 hover:text-blue-700"
+                          className="mt-3 text-xs text-blue-500 hover:text-blue-400"
                         >
                           ✓ 完成
                         </button>
@@ -671,7 +721,7 @@ export function ChatInterface({
         </div>
       </div>
 
-      <div className="relative border-t p-4 bg-white shrink-0">
+      <div className="relative border-t border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900 shrink-0">
         <AnimatePresence>
           {showScrollButton && (
             <motion.button
@@ -694,19 +744,23 @@ export function ChatInterface({
         <form onSubmit={handleSubmit}>
           <div className="flex gap-2">
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="输入研究任务，例如：用维基百科介绍 Transformer"
-              className="flex-1 rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onKeyDown={handleKeyDown}
+              placeholder="输入问题... (Enter 发送，Shift+Enter 换行)"
+              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
               disabled={isLoading || !sessionId}
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim() || !sessionId}
-              className="rounded-lg bg-blue-500 px-6 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
-              发送
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+              </svg>
             </button>
           </div>
         </form>

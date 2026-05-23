@@ -75,14 +75,14 @@ export function AgentStatus({
   };
 
   return (
-    <aside className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div className="flex border-b">
+    <aside className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <div className="flex border-b border-slate-200 dark:border-slate-700">
         <button
           onClick={() => setActiveTab('sessions')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
             activeTab === 'sessions'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
           会话历史
@@ -91,8 +91,8 @@ export function AgentStatus({
           onClick={() => setActiveTab('skills')}
           className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
             activeTab === 'skills'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
           技能库
@@ -104,7 +104,7 @@ export function AgentStatus({
           <div className="p-3">
             <button
               onClick={() => onCreateSession()}
-              className="w-full mb-3 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
+              className="w-full mb-3 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 px-4 py-3 text-sm text-slate-500 dark:text-slate-400 hover:border-blue-400 hover:text-blue-500 dark:hover:border-blue-500 dark:hover:text-blue-400 transition-colors"
             >
               <span className="text-lg">+</span>
               <span>新建会话</span>
@@ -120,8 +120,8 @@ export function AgentStatus({
                     exit={{ opacity: 0, x: -10 }}
                     className={`group relative rounded-lg p-2.5 cursor-pointer transition-colors ${
                       sessionId === session.id
-                        ? 'bg-blue-50 border border-blue-200'
-                        : 'hover:bg-slate-50 border border-transparent'
+                        ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent'
                     }`}
                     onClick={() => onSwitchSession(session.id)}
                   >
@@ -135,7 +135,7 @@ export function AgentStatus({
                             if (e.key === 'Enter') handleSaveEdit();
                             if (e.key === 'Escape') setEditingId(null);
                           }}
-                          className="flex-1 px-2 py-1 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="flex-1 px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           autoFocus
                         />
                         <button
@@ -154,18 +154,18 @@ export function AgentStatus({
                                 {session.title.length > 0 ? '💬' : '📝'}
                               </span>
                               <span className={`text-sm font-medium truncate ${
-                                sessionId === session.id ? 'text-blue-700' : 'text-slate-700'
+                                sessionId === session.id ? 'text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'
                               }`}>
                                 {session.title || '新会话'}
                               </span>
                             </div>
                             {session.first_message && (
-                              <p className="mt-1 text-xs text-slate-400 truncate pl-5">
+                              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500 truncate pl-5">
                                 {session.first_message.substring(0, 30)}...
                               </p>
                             )}
                           </div>
-                          <span className="text-xs text-slate-400 shrink-0">
+                          <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
                             {formatDate(session.updated_at)}
                           </span>
                         </div>
@@ -175,7 +175,7 @@ export function AgentStatus({
                               e.stopPropagation();
                               handleStartEdit(session);
                             }}
-                            className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                             title="重命名"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -189,8 +189,8 @@ export function AgentStatus({
                             }}
                             className={`p-1 rounded transition-colors ${
                               confirmDeleteId === session.id
-                                ? 'bg-red-100 text-red-600'
-                                : 'hover:bg-slate-200 text-slate-400 hover:text-red-500'
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                : 'hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-red-500 dark:hover:text-red-400'
                             }`}
                             title={confirmDeleteId === session.id ? '确认删除' : '删除'}
                           >
@@ -206,7 +206,7 @@ export function AgentStatus({
               </AnimatePresence>
 
               {sessions.length === 0 && (
-                <div className="text-center py-8 text-sm text-slate-400">
+                <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
                   暂无会话，点击上方创建
                 </div>
               )}
@@ -221,13 +221,13 @@ export function AgentStatus({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => onSelectSkill(skill)}
-                  className="w-full text-left rounded-lg border border-slate-200 p-3 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                  className="w-full text-left rounded-lg border border-slate-200 dark:border-slate-700 p-3 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{skill.icon}</span>
-                    <span className="text-sm font-medium text-slate-700">{skill.name}</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{skill.name}</span>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500 pl-7">
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 pl-7">
                     {skill.description}
                   </p>
                 </motion.button>
@@ -238,8 +238,8 @@ export function AgentStatus({
       </div>
 
       {sessionError && (
-        <div className="border-t p-3">
-          <p className="text-xs text-red-500">{sessionError}</p>
+        <div className="border-t border-slate-200 dark:border-slate-700 p-3">
+          <p className="text-xs text-red-500 dark:text-red-400">{sessionError}</p>
         </div>
       )}
     </aside>

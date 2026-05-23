@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
+import { normalizeMarkdown } from '../utils/markdownNormalize';
 
 interface MarkdownRendererProps {
   content: string;
@@ -96,7 +97,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         hr: () => <hr className="my-4 border-slate-200" />,
       }}
     >
-      {content}
+      {normalizeMarkdown(content)}
     </ReactMarkdown>
   );
 }

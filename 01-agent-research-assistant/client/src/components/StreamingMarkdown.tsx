@@ -1,10 +1,53 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { normalizeMarkdown } from '../utils/markdownNormalize';
 
 interface StreamingMarkdownProps {
   content: string;
   speed?: number;
   onComplete?: () => void;
+}
+
+function cleanIncompleteMarkdown(text: string): string {
+  let cleaned = normalizeMarkdown(text);
+  
+  // 计算未闭合的 ** 数量
+  const boldMarkers = cleaned.match(/\*\*/g);
+  if (boldMarkers && boldMarkers.length % 2 !== 0) {
+    // 有未闭合的 **，移除最后一个
+    const lastIdx = cleaned.lastIndexOf('**');
+    cleaned = cleaned.slice(0, lastIdx) + cleaned.slice(lastIdx + 2);
+  }
+  
+  // 计算未闭合的 * 数量（排除 **）
+  const singleStars = cleaned.replace(/\*\*/g, '').match(/\*/g);
+  if (singleStars && singleStars.length % 2 !== 0) {
+    const lastIdx = cleaned.lastIndexOf('*');
+    cleaned = cleaned.slice(0, lastIdx) + cleaned.slice(lastIdx + 1);
+  }
+  
+  // 处理未闭合的 `
+  const backticks = cleaned.match(/`/g);
+  if (backticks && backticks.length % 2 !== 0) {
+    const lastIdx = cleaned.lastIndexOf('`');
+    cleaned = cleaned.slice(0, lastIdx) + cleaned.slice(lastIdx + 1);
+  }
+  
+  // 处理未闭合的 [
+  const openBrackets = (cleaned.match(/\[/g) || []).length;
+  const closeBrackets = (cleaned.match(/\]/g) || []).length;
+  if (openBrackets > closeBrackets) {
+    // 移除多余的 [
+    let remaining = openBrackets - closeBrackets;
+    for (let i = cleaned.length - 1; i >= 0 && remaining > 0; i--) {
+      if (cleaned[i] === '[') {
+        cleaned = cleaned.slice(0, i) + cleaned.slice(i + 1);
+        remaining--;
+      }
+    }
+  }
+  
+  return cleaned;
 }
 
 export function StreamingMarkdown({ content, speed = 8, onComplete }: StreamingMarkdownProps) {
@@ -42,11 +85,13 @@ export function StreamingMarkdown({ content, speed = 8, onComplete }: StreamingM
       if (indexRef.current < currentContent.length) {
         const charsToAdd = Math.min(5, currentContent.length - indexRef.current);
         const nextIndex = indexRef.current + charsToAdd;
-        setDisplayedContent(currentContent.slice(0, nextIndex));
+        const rawContent = currentContent.slice(0, nextIndex);
+        setDisplayedContent(cleanIncompleteMarkdown(rawContent));
         indexRef.current = nextIndex;
         
         timerRef.current = window.setTimeout(animate, speed);
       } else {
+        setDisplayedContent(cleanIncompleteMarkdown(currentContent));
         setIsComplete(true);
         onComplete?.();
       }
@@ -61,7 +106,7 @@ export function StreamingMarkdown({ content, speed = 8, onComplete }: StreamingM
 
   return (
     <div className="relative">
-      <div className={isComplete ? '' : 'opacity-95'}>
+      <div>
         <MarkdownRenderer content={displayedContent} />
       </div>
       {!isComplete && (

@@ -65,14 +65,9 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.2, delay: index * 0.05 }}
-      className="border-l-2 border-slate-200 pl-3 py-1"
-    >
+    <div className="border-l-2 border-slate-200 pl-3 py-1">
       <div
-        className="flex items-start gap-2 cursor-pointer hover:bg-slate-50 rounded p-1 -ml-1"
+        className="flex items-start gap-2 cursor-pointer hover:bg-slate-100 rounded p-1.5 -ml-1 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <span className="text-slate-400 text-xs mt-0.5 shrink-0">
@@ -92,7 +87,7 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
+          <p className="text-xs text-slate-600 mt-0.5 line-clamp-1">
             {step.thought}
           </p>
         </div>
@@ -107,10 +102,10 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 ml-4 space-y-2 text-xs">
-              <div className="bg-slate-50 rounded p-2">
+            <div className="mt-2 ml-4 space-y-2 text-xs overflow-hidden">
+              <div className="bg-slate-100 rounded p-2">
                 <div className="font-medium text-slate-500 mb-1">💭 思考</div>
-                <p className="text-slate-700">{step.thought}</p>
+                <p className="text-slate-700 break-words">{step.thought}</p>
               </div>
 
               {step.action && (
@@ -118,7 +113,7 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
                   <div className="font-medium text-blue-500 mb-1">
                     {getToolIcon(step.action.tool)} 调用工具: {getToolName(step.action.tool)}
                   </div>
-                  <pre className="text-blue-700 whitespace-pre-wrap break-all">
+                  <pre className="text-blue-700 whitespace-pre-wrap break-all text-xs overflow-hidden">
                     {JSON.stringify(step.action.input, null, 2)}
                   </pre>
                 </div>
@@ -127,7 +122,7 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
               {step.observation !== undefined && (
                 <div className="bg-amber-50 rounded p-2">
                   <div className="font-medium text-amber-500 mb-1">👁️ 观察结果</div>
-                  <p className="text-amber-700 whitespace-pre-wrap">
+                  <p className="text-amber-700 whitespace-pre-wrap break-words">
                     {formatObservation(step.observation)}
                   </p>
                 </div>
@@ -136,14 +131,14 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
               {step.finalAnswer && (
                 <div className="bg-green-50 rounded p-2">
                   <div className="font-medium text-green-500 mb-1">✅ 最终答案</div>
-                  <p className="text-green-700 line-clamp-3">{step.finalAnswer}</p>
+                  <p className="text-green-700 line-clamp-3 break-words">{step.finalAnswer}</p>
                 </div>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
@@ -170,14 +165,14 @@ function StepsProcess({ steps, isRunning }: { steps: AgentStep[]; isRunning: boo
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
           ) : (
-            <span className="text-green-500">✓</span>
+            <span className="text-green-500 text-xs">✓</span>
           )}
           <span className="text-xs font-medium text-slate-600">
             {isRunning ? 'Agent 正在思考...' : `已完成 ${steps.length} 个步骤`}
           </span>
         </div>
         <span className="text-xs text-slate-400">
-          {expanded ? '收起详情' : '展开详情'}
+          {expanded ? '收起' : '展开'}
         </span>
       </button>
 
@@ -190,7 +185,7 @@ function StepsProcess({ steps, isRunning }: { steps: AgentStep[]; isRunning: boo
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 space-y-1 max-h-60 overflow-y-auto">
+            <div className="px-3 pb-3 space-y-1 max-h-52 overflow-y-auto">
               {steps.map((step, i) => (
                 <StepItem key={i} step={step} index={i} />
               ))}
@@ -411,7 +406,7 @@ export function ChatInterface({
     <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border bg-white shadow-sm">
       <div
         ref={scrollContainerRef}
-        className="flex-1 space-y-4 overflow-y-auto p-4 relative"
+        className="flex-1 space-y-4 overflow-y-auto p-4"
         onScroll={handleScroll}
       >
         <AnimatePresence mode="popLayout">
@@ -491,21 +486,23 @@ export function ChatInterface({
         )}
 
         <div ref={messagesEndRef} />
+      </div>
 
+      <div className="relative border-t p-4">
         <AnimatePresence>
           {showScrollButton && (
             <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.2 }}
               onClick={() => scrollToBottom()}
-              className="fixed bottom-24 right-8 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 transition-colors"
+              className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500 text-white text-xs shadow-lg hover:bg-blue-600 transition-colors"
               title="滚动到底部"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
+                className="h-3.5 w-3.5"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -515,30 +512,31 @@ export function ChatInterface({
                   clipRule="evenodd"
                 />
               </svg>
+              <span>回到底部</span>
             </motion.button>
           )}
         </AnimatePresence>
-      </div>
 
-      <form onSubmit={handleSubmit} className="border-t p-4">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="输入研究任务，例如：用维基百科介绍 Transformer"
-            className="flex-1 rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={isLoading || !sessionId}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim() || !sessionId}
-            className="rounded-lg bg-blue-500 px-6 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            发送
-          </button>
-        </div>
-      </form>
+        <form onSubmit={handleSubmit}>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="输入研究任务，例如：用维基百科介绍 Transformer"
+              className="flex-1 rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLoading || !sessionId}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim() || !sessionId}
+              className="rounded-lg bg-blue-500 px-6 py-2 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              发送
+            </button>
+          </div>
+        </form>
+      </div>
     </section>
   );
 }

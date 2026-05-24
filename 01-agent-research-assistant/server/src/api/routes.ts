@@ -278,6 +278,20 @@ router.get('/skills', (_req, res) => {
       description: '创意发散思维',
       prompt: '请围绕以下主题进行头脑风暴，提供多个创意方向和可行性分析：',
     },
+    {
+      id: 'interview',
+      name: '面试助手',
+      icon: '🎯',
+      description: '模拟面试、准备面试问题、提供回答建议',
+      prompt: '我正在准备面试。请帮我：\n1. 分析这个岗位的核心要求\n2. 列出常见面试问题\n3. 提供回答思路和示例\n\n岗位/公司信息：',
+    },
+    {
+      id: 'explain',
+      name: '概念解释',
+      icon: '📚',
+      description: '用简单易懂的方式解释复杂概念',
+      prompt: '请用简单易懂的方式解释以下概念，包括：\n1. 核心定义\n2. 通俗类比\n3. 实际应用场景\n4. 相关概念对比\n\n概念：',
+    },
   ];
   res.json(skills);
 });

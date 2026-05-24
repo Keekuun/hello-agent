@@ -41,10 +41,19 @@ export function AgentStatus({
   };
 
   const handleSaveEdit = async () => {
-    if (editingId && editTitle.trim()) {
-      await onRenameSession(editingId, editTitle.trim());
+    if (!editingId || !editTitle.trim()) {
       setEditingId(null);
+      return;
     }
+
+    const session = sessions.find(s => s.id === editingId);
+    if (session && session.title === editTitle.trim()) {
+      setEditingId(null);
+      return;
+    }
+
+    await onRenameSession(editingId, editTitle.trim());
+    setEditingId(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -53,7 +62,10 @@ export function AgentStatus({
       setConfirmDeleteId(null);
     } else {
       setConfirmDeleteId(id);
-      setTimeout(() => setConfirmDeleteId(null), 3000);
+      // 5秒后自动取消确认状态
+      setTimeout(() => {
+        setConfirmDeleteId((current) => current === id ? null : current);
+      }, 5000);
     }
   };
 
@@ -165,39 +177,50 @@ export function AgentStatus({
                               </p>
                             )}
                           </div>
-                          <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
-                            {formatDate(session.updated_at)}
-                          </span>
-                        </div>
-                        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEdit(session);
-                            }}
-                            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                            title="重命名"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(session.id);
-                            }}
-                            className={`p-1 rounded transition-colors ${
-                              confirmDeleteId === session.id
-                                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                                : 'hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-red-500 dark:hover:text-red-400'
-                            }`}
-                            title={confirmDeleteId === session.id ? '确认删除' : '删除'}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">
+                              {formatDate(session.updated_at)}
+                            </span>
+                            <div className={`flex gap-0.5 transition-opacity ${confirmDeleteId === session.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEdit(session);
+                                }}
+                                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                title="重命名"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(session.id);
+                                }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                                  confirmDeleteId === session.id
+                                    ? 'bg-red-500 text-white hover:bg-red-600'
+                                    : 'hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-red-500 dark:hover:text-red-400'
+                                }`}
+                                title={confirmDeleteId === session.id ? '再次点击确认删除' : '删除'}
+                              >
+                                {confirmDeleteId === session.id ? (
+                                  <>
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>确认</span>
+                                  </>
+                                ) : (
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </>
                     )}

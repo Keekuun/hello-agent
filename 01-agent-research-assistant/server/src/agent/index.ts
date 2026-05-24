@@ -32,7 +32,9 @@ export class ResearchAgent {
       timestamp: new Date(),
     });
 
-    const memoryContext = await this.memoryManager.buildMemoryContext(task);
+    // 暂时禁用跨会话记忆，避免新会话有历史记忆
+    // const memoryContext = await this.memoryManager.buildMemoryContext(task);
+    const memoryContext = '';
     
     const result = await this.engine.run(task, onProgress, memoryContext);
 
@@ -43,9 +45,10 @@ export class ResearchAgent {
       timestamp: new Date(),
     });
 
-    this.memoryManager.extractAndSaveMemories(task, result).catch(err => {
-      console.warn('Memory extraction failed:', err);
-    });
+    // 暂时禁用记忆提取
+    // this.memoryManager.extractAndSaveMemories(task, result).catch(err => {
+    //   console.warn('Memory extraction failed:', err);
+    // });
 
     return result;
   }

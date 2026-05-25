@@ -22,6 +22,19 @@ interface Message {
   isRecallable?: boolean;
 }
 
+interface SessionState {
+  messages: Message[];
+  pendingAnswer: string | null;
+  pendingSteps: AgentStep[];
+  isTyping: boolean;
+  isLoading: boolean;
+  taskQueue: string[];
+  historyCount: number;
+  recallableIds: Set<string>;
+  lastTask: string | null;
+  abortController: AbortController | null;
+}
+
 interface ChatInterfaceProps {
   sessionId: string | null;
   createSession: (title?: string) => Promise<string | null>;
@@ -33,6 +46,25 @@ interface ChatInterfaceProps {
 }
 
 const messageCache = new Map<string, Message[]>();
+const sessionStates = new Map<string, SessionState>();
+
+function getOrCreateSessionState(sessionId: string): SessionState {
+  if (!sessionStates.has(sessionId)) {
+    sessionStates.set(sessionId, {
+      messages: [],
+      pendingAnswer: null,
+      pendingSteps: [],
+      isTyping: false,
+      isLoading: false,
+      taskQueue: [],
+      historyCount: 0,
+      recallableIds: new Set(),
+      lastTask: null,
+      abortController: null,
+    });
+  }
+  return sessionStates.get(sessionId)!;
+}
 
 function CopyButton({ content, className = '' }: { content: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -346,11 +378,6 @@ export function ChatInterface({
   const currentSessionIdRef = useRef<string | null>(null);
   const isLoadingSessionRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const lastTaskRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const historyCountRef = useRef(0);
-  const recallableIdsRef = useRef<Set<string>>(new Set());
-  const taskQueueRef = useRef<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -362,18 +389,47 @@ export function ChatInterface({
     onDisconnect: () => console.log('Disconnected'),
   });
 
+  // 保存当前会话状态
+  const saveCurrentSessionState = useCallback(() => {
+    const sid = currentSessionIdRef.current;
+    if (!sid) return;
+    
+    const state = getOrCreateSessionState(sid);
+    state.messages = messages;
+    state.pendingAnswer = pendingAnswer;
+    state.pendingSteps = pendingSteps;
+    state.isTyping = isTyping;
+    state.isLoading = isLoading;
+    state.taskQueue = taskQueue;
+  }, [messages, pendingAnswer, pendingSteps, isTyping, isLoading, taskQueue]);
+
+  // 加载会话状态
+  const loadSessionState = useCallback((sid: string) => {
+    const state = getOrCreateSessionState(sid);
+    setMessages(state.messages);
+    setPendingAnswer(state.pendingAnswer);
+    setPendingSteps(state.pendingSteps);
+    setIsTyping(state.isTyping);
+    setIsLoading(state.isLoading);
+    setTaskQueue(state.taskQueue);
+  }, []);
+
   const loadMessages = useCallback(async (sid: string) => {
     if (messageCache.has(sid)) {
       const cached = messageCache.get(sid)!;
+      const state = getOrCreateSessionState(sid);
+      state.messages = cached;
+      state.historyCount = cached.length;
+      state.recallableIds.clear();
       setMessages(cached);
-      historyCountRef.current = cached.length;
-      recallableIdsRef.current.clear();
       return;
     }
 
     try {
       const res = await fetch(`/api/sessions/${sid}/history`);
       const history = await res.json();
+      
+      const state = getOrCreateSessionState(sid);
       
       if (Array.isArray(history) && history.length > 0) {
         const formattedMessages: Message[] = history.map((msg, i) => ({
@@ -382,19 +438,23 @@ export function ChatInterface({
           content: msg.content,
           timestamp: msg.timestamp || new Date().toISOString(),
         }));
-        setMessages(formattedMessages);
+        state.messages = formattedMessages;
+        state.historyCount = formattedMessages.length;
         messageCache.set(sid, formattedMessages);
-        historyCountRef.current = formattedMessages.length;
+        setMessages(formattedMessages);
       } else {
-        setMessages([]);
+        state.messages = [];
+        state.historyCount = 0;
         messageCache.set(sid, []);
-        historyCountRef.current = 0;
+        setMessages([]);
       }
-      recallableIdsRef.current.clear();
+      state.recallableIds.clear();
     } catch (err) {
       console.warn('Failed to fetch history:', err);
+      const state = getOrCreateSessionState(sid);
+      state.messages = [];
+      state.historyCount = 0;
       setMessages([]);
-      historyCountRef.current = 0;
     }
   }, []);
 
@@ -404,20 +464,22 @@ export function ChatInterface({
       setPendingAnswer(null);
       setPendingSteps([]);
       setIsTyping(false);
+      setIsLoading(false);
+      setTaskQueue([]);
       currentSessionIdRef.current = null;
-      recallableIdsRef.current.clear();
       return;
     }
 
     if (sessionId !== currentSessionIdRef.current && !isLoadingSessionRef.current) {
+      // 保存当前会话状态
+      saveCurrentSessionState();
+      
       isLoadingSessionRef.current = true;
       setIsSwitchingSession(true);
       
-      setPendingAnswer(null);
-      setPendingSteps([]);
-      setIsTyping(false);
-      
-      loadMessages(sessionId).finally(() => {
+      // 加载新会话
+      loadMessages(sessionId).then(() => {
+        loadSessionState(sessionId);
         currentSessionIdRef.current = sessionId;
         isLoadingSessionRef.current = false;
         
@@ -430,7 +492,7 @@ export function ChatInterface({
         });
       });
     }
-  }, [sessionId, loadMessages]);
+  }, [sessionId, loadMessages, loadSessionState, saveCurrentSessionState]);
 
   useEffect(() => {
     onLoadingChange(isLoading);
@@ -496,6 +558,9 @@ export function ChatInterface({
   }, [messages, pendingAnswer, pendingSteps, isLoading, isTyping, scrollToBottom]);
 
   const finalizeMessage = useCallback((content: string, steps?: AgentStep[]) => {
+    const sid = currentSessionIdRef.current;
+    if (!sid) return;
+
     const assistantMessage: Message = {
       id: Date.now().toString(),
       role: 'assistant',
@@ -503,24 +568,30 @@ export function ChatInterface({
       steps,
       timestamp: new Date().toISOString(),
     };
+    
     setMessages((prev) => {
       const updated = prev.map(m => ({ ...m, isRecallable: false }));
       updated.push(assistantMessage);
-      if (currentSessionIdRef.current) {
-        messageCache.set(currentSessionIdRef.current, updated);
-      }
+      messageCache.set(sid, updated);
+      
+      const state = getOrCreateSessionState(sid);
+      state.messages = updated;
+      state.recallableIds.clear();
+      
       return updated;
     });
-    recallableIdsRef.current.clear();
     setPendingAnswer(null);
     setPendingSteps([]);
     setIsTyping(false);
+    setIsLoading(false);
     onSessionUpdate?.();
     
+    // 处理队列
     setTimeout(() => {
-      if (taskQueueRef.current.length > 0) {
-        const nextTask = taskQueueRef.current.shift();
-        setTaskQueue([...taskQueueRef.current]);
+      const state = getOrCreateSessionState(sid);
+      if (state.taskQueue.length > 0) {
+        const nextTask = state.taskQueue.shift();
+        setTaskQueue([...state.taskQueue]);
         if (nextTask) {
           handleSubmitWithContent(nextTask);
         }
@@ -530,7 +601,6 @@ export function ChatInterface({
 
   const handleTypewriterComplete = useCallback(() => {
     setIsTyping(false);
-    // 自动完成消息
     setTimeout(() => {
       if (pendingAnswer) {
         finalizeMessage(pendingAnswer, pendingSteps);
@@ -539,20 +609,24 @@ export function ChatInterface({
   }, [pendingAnswer, pendingSteps, finalizeMessage]);
 
   const handleAbort = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    const sid = currentSessionIdRef.current;
+    if (!sid) return;
+    
+    const state = getOrCreateSessionState(sid);
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
     }
     
-    if (isLoading) {
-      const lastUserMsg = messages[messages.length - 1];
-      if (lastUserMsg?.role === 'user' && messages.length > historyCountRef.current) {
+    if (state.isLoading) {
+      const msgs = state.messages;
+      const lastUserMsg = msgs[msgs.length - 1];
+      if (lastUserMsg?.role === 'user' && msgs.length > state.historyCount) {
         setInput(lastUserMsg.content);
         setMessages((prev) => {
           const updated = prev.slice(0, -1);
-          if (currentSessionIdRef.current) {
-            messageCache.set(currentSessionIdRef.current, updated);
-          }
+          messageCache.set(sid, updated);
+          state.messages = updated;
           return updated;
         });
       }
@@ -560,11 +634,19 @@ export function ChatInterface({
       setPendingAnswer(null);
       setPendingSteps([]);
       setIsTyping(false);
+      state.isLoading = false;
+      state.pendingAnswer = null;
+      state.pendingSteps = [];
+      state.isTyping = false;
     }
-  }, [isLoading, messages]);
+  }, []);
 
   const handleRecall = useCallback((messageId: string) => {
-    if (!recallableIdsRef.current.has(messageId)) return;
+    const sid = currentSessionIdRef.current;
+    if (!sid) return;
+    
+    const state = getOrCreateSessionState(sid);
+    if (!state.recallableIds.has(messageId)) return;
 
     setMessages((prev) => {
       const idx = prev.findIndex(m => m.id === messageId);
@@ -578,24 +660,40 @@ export function ChatInterface({
         ? [...prev.slice(0, idx), ...prev.slice(idx + 2)]
         : [...prev.slice(0, idx), ...prev.slice(idx + 1)];
 
-      if (currentSessionIdRef.current) {
-        messageCache.set(currentSessionIdRef.current, updated);
-      }
-      recallableIdsRef.current.delete(messageId);
+      messageCache.set(sid, updated);
+      state.messages = updated;
+      state.recallableIds.delete(messageId);
       return updated;
     });
 
     if (isLoading && messages[messages.length - 1]?.id === messageId) {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      setIsLoading(false);
-      setPendingAnswer(null);
-      setPendingSteps([]);
-      setIsTyping(false);
+      handleAbort();
     }
-  }, [isLoading, messages]);
+  }, [isLoading, messages, handleAbort]);
+
+  const handleResend = useCallback((messageId: string, content: string) => {
+    const sid = currentSessionIdRef.current;
+    if (!sid) return;
+    
+    setMessages((prev) => {
+      const idx = prev.findIndex(m => m.id === messageId);
+      if (idx === -1) return prev;
+      
+      const nextMsg = prev[idx + 1];
+      const updated = nextMsg?.role === 'assistant' 
+        ? [...prev.slice(0, idx), ...prev.slice(idx + 2)]
+        : [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      
+      messageCache.set(sid, updated);
+      const state = getOrCreateSessionState(sid);
+      state.messages = updated;
+      return updated;
+    });
+    
+    setTimeout(() => {
+      handleSubmitWithContent(content);
+    }, 100);
+  }, []);
 
   const handleUndo = useCallback(() => {
     if (isLoading || isTyping) {
@@ -606,27 +704,6 @@ export function ChatInterface({
       setInput('');
     }
   }, [isLoading, isTyping, input, handleAbort]);
-
-  const handleResend = useCallback((messageId: string, content: string) => {
-    setMessages((prev) => {
-      const idx = prev.findIndex(m => m.id === messageId);
-      if (idx === -1) return prev;
-      
-      const nextMsg = prev[idx + 1];
-      const updated = nextMsg?.role === 'assistant' 
-        ? [...prev.slice(0, idx), ...prev.slice(idx + 2)]
-        : [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-      
-      if (currentSessionIdRef.current) {
-        messageCache.set(currentSessionIdRef.current, updated);
-      }
-      return updated;
-    });
-    
-    setTimeout(() => {
-      handleSubmitWithContent(content);
-    }, 100);
-  }, []);
 
   const handleRetry = useCallback((content: string) => {
     setInput('');
@@ -645,6 +722,7 @@ export function ChatInterface({
       currentSessionIdRef.current = newSessionId;
     }
 
+    const state = getOrCreateSessionState(activeSessionId);
     const messageId = Date.now().toString();
     const userMessage: Message = {
       id: messageId,
@@ -654,10 +732,14 @@ export function ChatInterface({
       isRecallable: true,
     };
 
-    recallableIdsRef.current.add(messageId);
+    state.recallableIds.add(messageId);
+    state.lastTask = task;
+    state.isLoading = true;
+    
     setMessages((prev) => {
       const updated = [...prev, userMessage];
       messageCache.set(activeSessionId!, updated);
+      state.messages = updated;
       return updated;
     });
     setInput('');
@@ -666,11 +748,10 @@ export function ChatInterface({
     setPendingSteps([]);
     setIsTyping(false);
     isAutoScrollRef.current = true;
-    lastTaskRef.current = task;
     onStepsChange([]);
 
     const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    state.abortController = abortController;
 
     try {
       const response = await fetch(`/api/sessions/${activeSessionId}/execute`, {
@@ -727,8 +808,13 @@ export function ChatInterface({
               } else {
                 steps.push(data);
               }
-              onStepsChange([...steps]);
-              setPendingSteps([...steps]);
+              
+              // 只有当前会话才更新 UI
+              if (currentSessionIdRef.current === activeSessionId) {
+                onStepsChange([...steps]);
+                setPendingSteps([...steps]);
+              }
+              state.pendingSteps = [...steps];
 
               if (data.finalAnswer) {
                 finalAnswer = data.finalAnswer;
@@ -741,18 +827,25 @@ export function ChatInterface({
       }
 
       if (finalAnswer) {
-        setPendingAnswer(finalAnswer);
-        setIsTyping(true);
-        setIsLoading(false);
+        state.pendingAnswer = finalAnswer;
+        state.isTyping = true;
+        state.isLoading = false;
+        
+        if (currentSessionIdRef.current === activeSessionId) {
+          setPendingAnswer(finalAnswer);
+          setIsTyping(true);
+          setIsLoading(false);
+        }
       } else {
         finalizeMessage('（无回复）', steps);
-        setIsLoading(false);
-        processQueue();
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('Request aborted');
-        setIsLoading(false);
+        state.isLoading = false;
+        if (currentSessionIdRef.current === activeSessionId) {
+          setIsLoading(false);
+        }
         return;
       }
       
@@ -764,11 +857,16 @@ export function ChatInterface({
         timestamp: new Date().toISOString(),
         isError: true,
       };
-      setMessages((prev) => [...prev, errorMsg]);
-      setIsLoading(false);
-      processQueue();
+      
+      state.messages = [...state.messages, errorMsg];
+      state.isLoading = false;
+      
+      if (currentSessionIdRef.current === activeSessionId) {
+        setMessages((prev) => [...prev, errorMsg]);
+        setIsLoading(false);
+      }
     } finally {
-      abortControllerRef.current = null;
+      state.abortController = null;
     }
   };
 
@@ -788,7 +886,7 @@ export function ChatInterface({
       e.preventDefault();
       handleUndo();
     }
-  }, [input, sessionId, isLoading, isTyping, handleAbort, handleUndo]);
+  }, [isLoading, isTyping, handleAbort, handleUndo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -797,8 +895,12 @@ export function ChatInterface({
     if (!task) return;
     
     if (isLoading) {
-      taskQueueRef.current.push(task);
-      setTaskQueue([...taskQueueRef.current]);
+      const sid = sessionId || currentSessionIdRef.current;
+      if (sid) {
+        const state = getOrCreateSessionState(sid);
+        state.taskQueue.push(task);
+        setTaskQueue([...state.taskQueue]);
+      }
       setInput('');
       return;
     }
@@ -806,16 +908,9 @@ export function ChatInterface({
     await handleSubmitWithContent(task);
   };
 
-  const processQueue = useCallback(async () => {
-    if (taskQueueRef.current.length === 0) return;
-    
-    const nextTask = taskQueueRef.current.shift();
-    setTaskQueue([...taskQueueRef.current]);
-    
-    if (nextTask) {
-      await handleSubmitWithContent(nextTask);
-    }
-  }, []);
+  const lastTask = currentSessionIdRef.current 
+    ? getOrCreateSessionState(currentSessionIdRef.current).lastTask 
+    : null;
 
   return (
     <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
@@ -831,6 +926,7 @@ export function ChatInterface({
         <div className={`flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-2 bg-white dark:bg-slate-900 shrink-0 transition-opacity duration-150 ${isSwitchingSession ? 'opacity-0' : 'opacity-100'}`}>
           <span className="text-xs text-slate-400">
             {messages.length} 条消息
+            {isLoading && ' · 处理中...'}
           </span>
           <div className="flex items-center gap-2 sm:gap-3">
             <CopyButton content={messages.map(m => `${m.role === 'user' ? '用户' : '助手'}: ${m.content}`).join('\n\n')} />
@@ -919,9 +1015,9 @@ export function ChatInterface({
                           {msg.isError ? '出错了' : 'Agent 回复'}
                         </span>
                         <div className="flex items-center gap-2">
-                          {msg.isError && lastTaskRef.current && (
+                          {msg.isError && lastTask && (
                             <button
-                              onClick={() => handleRetry(lastTaskRef.current!)}
+                              onClick={() => handleRetry(lastTask)}
                               className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400"
                               title="重试"
                             >
@@ -980,42 +1076,23 @@ export function ChatInterface({
 
       <div className="relative border-t border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-900 shrink-0">
         <AnimatePresence>
-          {showScrollButton && (
-            <motion.button
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-              onClick={() => scrollToBottom()}
-              className="sticky bottom-4 left-1/2 -translate-x-1/2 z-10 mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500 text-white text-xs shadow-lg hover:bg-blue-600 transition-colors"
-              title="滚动到底部"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-              <span>回到底部</span>
-            </motion.button>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
           {taskQueue.length > 0 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+              className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 mb-3 -mt-4 -mx-4 px-4 pt-2 pb-1"
             >
               <button
                 type="button"
                 onClick={() => setShowQueue(!showQueue)}
-                className="w-full flex items-center justify-between px-4 py-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                className="w-full flex items-center justify-between text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 <div className="flex items-center gap-2">
                   <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>等待队列: {taskQueue.length} 条消息</span>
+                  <span>等待队列: {taskQueue.length} 条</span>
                 </div>
                 <svg
                   className={`w-4 h-4 transition-transform ${showQueue ? 'rotate-180' : ''}`}
@@ -1034,13 +1111,13 @@ export function ChatInterface({
                     exit={{ height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-2 space-y-1 max-h-32 overflow-y-auto">
+                    <div className="pb-2 space-y-1 max-h-24 overflow-y-auto">
                       {taskQueue.map((task, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-2 px-2 py-1.5 bg-white dark:bg-slate-700 rounded text-xs"
+                          className="flex items-center gap-2 px-2 py-1 bg-white dark:bg-slate-700 rounded text-xs"
                         >
-                          <span className="w-5 h-5 flex items-center justify-center bg-slate-200 dark:bg-slate-600 rounded-full text-slate-500 shrink-0">
+                          <span className="w-4 h-4 flex items-center justify-center bg-slate-200 dark:bg-slate-600 rounded-full text-slate-500 shrink-0 text-[10px]">
                             {index + 1}
                           </span>
                           <span className="truncate text-slate-700 dark:text-slate-300">{task}</span>

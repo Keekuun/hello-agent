@@ -1,4 +1,6 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { toast } from '../components/Toast';
+import { getHttpErrorMessage, toUserMessage } from '../utils/safeErrorMessage';
 
 const API_BASE = '/api';
 
@@ -19,32 +21,41 @@ export interface Skill {
   prompt: string;
 }
 
+async function readPublicError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = (await response.json()) as { error?: string };
+    if (data.error && typeof data.error === 'string') {
+      return toUserMessage(new Error(data.error), fallback);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return getHttpErrorMessage(response.status, fallback);
+}
+
 export function useAgent() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const initErrorShownRef = useRef(false);
 
   const fetchSessions = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/sessions`);
-      if (!response.ok) throw new Error('获取会话列表失败');
-      const data = await response.json();
-      setSessions(data as Session[]);
-    } catch (err) {
-      console.error('Failed to fetch sessions:', err);
+    const response = await fetch(`${API_BASE}/sessions`);
+    if (!response.ok) {
+      throw new Error(await readPublicError(response, '无法加载会话列表'));
     }
+    const data = await response.json();
+    setSessions(data as Session[]);
   }, []);
 
   const fetchSkills = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/skills`);
-      if (!response.ok) throw new Error('获取技能列表失败');
-      const data = await response.json();
-      setSkills(data as Skill[]);
-    } catch (err) {
-      console.error('Failed to fetch skills:', err);
+    const response = await fetch(`${API_BASE}/skills`);
+    if (!response.ok) {
+      throw new Error(await readPublicError(response, '无法加载技能列表'));
     }
+    const data = await response.json();
+    setSkills(data as Skill[]);
   }, []);
 
   const createSession = useCallback(async (title?: string) => {
@@ -56,8 +67,7 @@ export function useAgent() {
       });
 
       if (!response.ok) {
-        const data = (await response.json()) as { error?: string };
-        throw new Error(data.error ?? '创建会话失败');
+        throw new Error(await readPublicError(response, '创建会话失败，请稍后重试'));
       }
 
       const data = (await response.json()) as { sessionId: string; title: string };
@@ -66,8 +76,9 @@ export function useAgent() {
       await fetchSessions();
       return data.sessionId;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = toUserMessage(err, '创建会话失败，请稍后重试');
       setError(message);
+      toast.error(message);
       return null;
     }
   }, [fetchSessions]);
@@ -84,14 +95,18 @@ export function useAgent() {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('删除会话失败');
+      if (!response.ok) {
+        throw new Error(await readPublicError(response, '删除会话失败，请稍后重试'));
+      }
 
       if (sessionId === id) {
         setSessionId(null);
       }
       await fetchSessions();
     } catch (err) {
+      const message = toUserMessage(err, '删除会话失败，请稍后重试');
       console.error('Failed to delete session:', err);
+      toast.error(message);
     }
   }, [sessionId, fetchSessions]);
 
@@ -103,16 +118,31 @@ export function useAgent() {
         body: JSON.stringify({ title }),
       });
 
-      if (!response.ok) throw new Error('重命名失败');
+      if (!response.ok) {
+        throw new Error(await readPublicError(response, '更新会话失败，请稍后重试'));
+      }
       await fetchSessions();
     } catch (err) {
+      const message = toUserMessage(err, '更新会话失败，请稍后重试');
       console.error('Failed to rename session:', err);
+      toast.error(message);
     }
   }, [fetchSessions]);
 
   useEffect(() => {
-    fetchSessions();
-    fetchSkills();
+    void (async () => {
+      const results = await Promise.allSettled([fetchSessions(), fetchSkills()]);
+      const failures = results.filter((result) => result.status === 'rejected');
+      if (failures.length > 0 && !initErrorShownRef.current) {
+        initErrorShownRef.current = true;
+        failures.forEach((result) => {
+          if (result.status === 'rejected') {
+            console.error('Failed to initialize agent data:', result.reason);
+          }
+        });
+        toast.error('服务暂时不可用，请稍后重试');
+      }
+    })();
   }, [fetchSessions, fetchSkills]);
 
   return {

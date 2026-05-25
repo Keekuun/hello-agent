@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { MemorySystem, Message } from './types';
+import { initializeDatabaseSchema } from '../db/schema';
 
 interface MessageRow {
   id: string;
@@ -26,46 +27,7 @@ export class SQLiteMemory implements MemorySystem {
   constructor(dbPath: string, sessionId: string) {
     this.sessionId = sessionId;
     this.db = new Database(dbPath);
-    this.initializeDatabase();
-  }
-
-  private initializeDatabase(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        metadata TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS knowledge (
-        key TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        value TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (key, session_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS memories (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        content TEXT NOT NULL,
-        keywords TEXT,
-        importance INTEGER DEFAULT 5,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_messages_session
-      ON messages(session_id, timestamp);
-
-      CREATE INDEX IF NOT EXISTS idx_memories_session
-      ON memories(session_id, created_at);
-
-      CREATE INDEX IF NOT EXISTS idx_memories_keywords
-      ON memories(keywords);
-    `);
+    initializeDatabaseSchema(this.db);
   }
 
   async addMessage(message: Message): Promise<void> {

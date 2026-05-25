@@ -15,14 +15,15 @@ export class ReActEngine {
   async run(
     task: string,
     onProgress?: (step: ReActStep) => void,
-    memoryContext?: string
+    memoryContext?: string,
+    conversationContext?: string
   ): Promise<string> {
     const steps: ReActStep[] = [];
 
     for (let i = 0; i < this.maxIterations; i++) {
       console.log(`\n--- 迭代 ${i + 1}/${this.maxIterations} ---`);
 
-      const step = await this.generateStep(task, steps, memoryContext);
+      const step = await this.generateStep(task, steps, memoryContext, conversationContext);
       steps.push(step);
 
       console.log(`💭 思考: ${step.thought}`);
@@ -60,9 +61,10 @@ export class ReActEngine {
   private async generateStep(
     task: string,
     previousSteps: ReActStep[],
-    memoryContext?: string
+    memoryContext?: string,
+    conversationContext?: string
   ): Promise<ReActStep> {
-    const prompt = this.buildPrompt(task, previousSteps, memoryContext);
+    const prompt = this.buildPrompt(task, previousSteps, memoryContext, conversationContext);
     const response = await this.config.llm.generate(prompt, {
       temperature: this.config.temperature ?? 0.7,
     });
@@ -70,7 +72,12 @@ export class ReActEngine {
     return this.parseResponse(response);
   }
 
-  private buildPrompt(task: string, previousSteps: ReActStep[], memoryContext?: string): string {
+  private buildPrompt(
+    task: string,
+    previousSteps: ReActStep[],
+    memoryContext?: string,
+    conversationContext?: string
+  ): string {
     const toolsDescription = this.tools.getDescription();
 
     const history = previousSteps
@@ -93,11 +100,15 @@ export class ReActEngine {
       })
       .join('\n');
 
+    const isContinuationTask = /继续|后续|不完整|没.*完整|接着说|补全|续写/i.test(task);
+
     return `你是一个智能研究助手。你可以使用以下工具来完成研究任务：
 
 可用工具：
 ${toolsDescription}
 ${memoryContext || ''}
+${conversationContext ? `\n对话历史:\n${conversationContext}\n` : ''}
+${isContinuationTask ? `\n【续写任务】用户希望继续上一轮未完成的内容。请优先直接输出 Final Answer 续写，通常无需再调用工具。\n` : ''}
 
 【重要】你必须严格按照以下格式输出，每次只输出一步：
 
@@ -113,6 +124,7 @@ Final Answer: 你的最终答案
 - Action 后面的工具名必须是上面列出的可用工具之一
 - 工具参数必须是有效的 JSON 格式
 - 搜索工具的参数格式为 {"query": "搜索关键词"}
+- 若用户要求续写/继续，请直接用 Final Answer 输出续写内容
 
 ${history ? `已完成的步骤:\n${history}\n` : ''}
 研究任务: ${task}
@@ -218,7 +230,42 @@ Thought:`.trim();
       }
     }
 
-    throw new Error('Invalid response format: missing Action or Final Answer');
+    const fallbackAnswer = this.extractFallbackFinalAnswer(response, thought);
+    if (fallbackAnswer) {
+      return {
+        thought,
+        finalAnswer: fallbackAnswer,
+      };
+    }
+
+    return {
+      thought: thought || '模型未按标准格式回复',
+      finalAnswer: '抱歉，暂时无法生成有效回复，请重试。',
+    };
+  }
+
+  private extractFallbackFinalAnswer(response: string, thought: string): string | null {
+    const trimmed = response.trim();
+    if (!trimmed) return null;
+
+    const withoutThoughtPrefix = trimmed.replace(/^Thought:\s*/i, '').trim();
+    const candidate =
+      withoutThoughtPrefix.length > thought.length ? withoutThoughtPrefix : trimmed;
+
+    const looksLikeDirectAnswer =
+      candidate.length >= 80 ||
+      /^(\d+\.\s|#{1,6}\s|[-*]\s|\*\*)/m.test(candidate) ||
+      candidate.includes('\n\n');
+
+    if (looksLikeDirectAnswer) {
+      return candidate;
+    }
+
+    if (thought.length >= 40 && !/^Action:/i.test(trimmed) && !/^Final Answer:/i.test(trimmed)) {
+      return thought;
+    }
+
+    return candidate.length > 0 ? candidate : null;
   }
 
   private async executeAction(action: {

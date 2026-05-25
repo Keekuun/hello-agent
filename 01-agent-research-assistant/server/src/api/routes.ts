@@ -5,6 +5,8 @@ import Database from 'better-sqlite3';
 import { ResearchAgent } from '../agent';
 import { OpenAIClient } from '../llm/openai-client';
 import { SQLiteMemory } from '../agent/memory';
+import { initializeDatabaseSchema, listSessions } from '../db/schema';
+import { logServerError, PublicError, respondWithError, writeSseError } from './http-error';
 
 const router = express.Router();
 const agents = new Map<string, ResearchAgent>();
@@ -18,14 +20,7 @@ function getDatabasePath(): string {
 
 function getDb(): Database.Database {
   const db = new Database(getDatabasePath());
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL DEFAULT '新会话',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  initializeDatabaseSchema(db);
   return db;
 }
 
@@ -82,8 +77,7 @@ router.post('/sessions', (req, res) => {
     agents.set(sessionId, agent);
     res.json({ sessionId, title: title || '新会话' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: message });
+    respondWithError(res, 500, 'POST /sessions', error, PublicError.CREATE_SESSION_FAILED);
   }
 });
 
@@ -91,18 +85,11 @@ router.post('/sessions', (req, res) => {
 router.get('/sessions', (_req, res) => {
   try {
     const db = getDb();
-    const sessions = db.prepare(`
-      SELECT s.*, 
-        (SELECT COUNT(*) FROM messages WHERE session_id = s.id) as message_count,
-        (SELECT content FROM messages WHERE session_id = s.id AND role = 'user' ORDER BY timestamp ASC LIMIT 1) as first_message
-      FROM sessions s
-      ORDER BY s.updated_at DESC
-    `).all();
+    const sessions = listSessions(db);
     db.close();
     res.json(sessions);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: message });
+    respondWithError(res, 500, 'GET /sessions', error, PublicError.LOAD_SESSIONS_FAILED);
   }
 });
 
@@ -115,13 +102,12 @@ router.get('/sessions/:sessionId', (req, res) => {
     db.close();
     
     if (!session) {
-      res.status(404).json({ error: 'Session not found' });
+      res.status(404).json({ error: PublicError.SESSION_NOT_FOUND });
       return;
     }
     res.json(session);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: message });
+    respondWithError(res, 500, 'GET /sessions/:sessionId', error, PublicError.LOAD_SESSION_FAILED);
   }
 });
 
@@ -138,8 +124,7 @@ router.patch('/sessions/:sessionId', (req, res) => {
     
     res.json({ ok: true, title });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: message });
+    respondWithError(res, 500, 'PATCH /sessions/:sessionId', error, PublicError.UPDATE_SESSION_FAILED);
   }
 });
 
@@ -149,7 +134,7 @@ router.post('/sessions/:sessionId/execute', async (req, res) => {
   const { task } = req.body as { task?: string };
 
   if (!task?.trim()) {
-    res.status(400).json({ error: 'task is required' });
+    res.status(400).json({ error: PublicError.TASK_REQUIRED });
     return;
   }
 
@@ -159,8 +144,9 @@ router.post('/sessions/:sessionId/execute', async (req, res) => {
     try {
       agent = createAgent(sessionId);
       agents.set(sessionId, agent);
-    } catch {
-      res.status(404).json({ error: 'Session not found' });
+    } catch (error) {
+      logServerError('POST /sessions/:sessionId/execute#createAgent', error);
+      res.status(404).json({ error: PublicError.SESSION_NOT_FOUND });
       return;
     }
   }
@@ -191,46 +177,55 @@ router.post('/sessions/:sessionId/execute', async (req, res) => {
       }).catch(err => console.warn('Failed to generate title:', err));
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
-    res.end();
+    writeSseError(res, 'POST /sessions/:sessionId/execute', error);
   }
 });
 
 // 获取会话历史
 router.get('/sessions/:sessionId/history', async (req, res) => {
   const { sessionId } = req.params;
-  let agent = agents.get(sessionId);
 
-  if (!agent) {
-    try {
-      agent = createAgent(sessionId);
-      agents.set(sessionId, agent);
-    } catch {
-      res.status(404).json({ error: 'Session not found' });
-      return;
+  try {
+    let agent = agents.get(sessionId);
+
+    if (!agent) {
+      try {
+        agent = createAgent(sessionId);
+        agents.set(sessionId, agent);
+      } catch (error) {
+        logServerError('GET /sessions/:sessionId/history#createAgent', error);
+        res.status(404).json({ error: PublicError.SESSION_NOT_FOUND });
+        return;
+      }
     }
-  }
 
-  const history = await agent.getHistory();
-  res.json(history);
+    const history = await agent.getHistory();
+    res.json(history);
+  } catch (error) {
+    respondWithError(res, 500, 'GET /sessions/:sessionId/history', error, PublicError.LOAD_HISTORY_FAILED);
+  }
 });
 
 // 删除会话
 router.delete('/sessions/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
-  const agent = agents.get(sessionId);
 
-  if (agent) {
-    await agent.clearSession();
-    agents.delete(sessionId);
+  try {
+    const agent = agents.get(sessionId);
+
+    if (agent) {
+      await agent.clearSession();
+      agents.delete(sessionId);
+    }
+
+    const db = getDb();
+    db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    db.close();
+
+    res.json({ ok: true });
+  } catch (error) {
+    respondWithError(res, 500, 'DELETE /sessions/:sessionId', error, PublicError.DELETE_SESSION_FAILED);
   }
-
-  const db = getDb();
-  db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
-  db.close();
-
-  res.json({ ok: true });
 });
 
 // 获取技能列表

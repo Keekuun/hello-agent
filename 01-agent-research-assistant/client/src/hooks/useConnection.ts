@@ -5,101 +5,149 @@ interface UseConnectionOptions {
   maxRetries?: number;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  onReconnectFailed?: () => void;
 }
 
 export function useConnection(options: UseConnectionOptions = {}) {
-  const { checkInterval = 30000, maxRetries = 5, onConnect, onDisconnect } = options;
-  const [isConnected, setIsConnected] = useState(true);
+  const { checkInterval = 30000, maxRetries = 5, onConnect, onDisconnect, onReconnectFailed } = options;
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const checkTimerRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
+  const isConnectedRef = useRef<boolean | null>(null);
+  const isReconnectingRef = useRef(false);
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onReconnectFailedRef = useRef(onReconnectFailed);
 
-  const checkConnection = useCallback(async () => {
+  onConnectRef.current = onConnect;
+  onDisconnectRef.current = onDisconnect;
+  onReconnectFailedRef.current = onReconnectFailed;
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const checkConnection = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch('/health', { 
+      const response = await fetch('/health', {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(5000),
       });
-      
+
       if (response.ok) {
-        if (!isConnected) {
-          setIsConnected(true);
-          setIsReconnecting(false);
-          setRetryCount(0);
-          onConnect?.();
+        const wasDisconnected = isConnectedRef.current === false;
+        isConnectedRef.current = true;
+        setIsConnected(true);
+        isReconnectingRef.current = false;
+        setIsReconnecting(false);
+        setRetryCount(0);
+        clearRetryTimer();
+        if (wasDisconnected) {
+          onConnectRef.current?.();
         }
         return true;
       }
       throw new Error('Health check failed');
     } catch {
-      if (isConnected) {
-        setIsConnected(false);
-        onDisconnect?.();
+      const wasConnected = isConnectedRef.current !== false;
+      isConnectedRef.current = false;
+      setIsConnected(false);
+      if (wasConnected) {
+        onDisconnectRef.current?.();
       }
       return false;
     }
-  }, [isConnected, onConnect, onDisconnect]);
+  }, [clearRetryTimer]);
 
-  const reconnect = useCallback(async () => {
-    if (isReconnecting) return;
-    
+  const startReconnect = useCallback(() => {
+    if (isReconnectingRef.current) return;
+
+    isReconnectingRef.current = true;
     setIsReconnecting(true);
-    
-    const attemptReconnect = async (attempt: number) => {
+    setRetryCount(0);
+
+    const attemptReconnect = (attempt: number) => {
       if (attempt >= maxRetries) {
+        isReconnectingRef.current = false;
         setIsReconnecting(false);
+        onReconnectFailedRef.current?.();
         return;
       }
 
-      const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
-      
+      const delay = attempt === 0 ? 0 : Math.min(1000 * Math.pow(2, attempt - 1), 30000);
+
       retryTimerRef.current = window.setTimeout(async () => {
-        setRetryCount(attempt + 1);
-        const success = await checkConnection();
-        
-        if (!success) {
-          attemptReconnect(attempt + 1);
-        } else {
+        if (isConnectedRef.current === true) {
+          isReconnectingRef.current = false;
           setIsReconnecting(false);
           setRetryCount(0);
+          return;
+        }
+
+        setRetryCount(attempt + 1);
+        const success = await checkConnection();
+
+        if (!success) {
+          attemptReconnect(attempt + 1);
         }
       }, delay);
     };
 
     attemptReconnect(0);
-  }, [isReconnecting, maxRetries, checkConnection]);
+  }, [maxRetries, checkConnection]);
+
+  const checkAndReconnect = useCallback(async () => {
+    const success = await checkConnection();
+    if (!success && !isReconnectingRef.current) {
+      startReconnect();
+    }
+    return success;
+  }, [checkConnection, startReconnect]);
 
   useEffect(() => {
-    checkConnection();
-    
-    checkTimerRef.current = window.setInterval(checkConnection, checkInterval);
-    
+    void checkAndReconnect();
+
+    checkTimerRef.current = window.setInterval(() => {
+      void checkAndReconnect();
+    }, checkInterval);
+
     const handleOnline = () => {
-      checkConnection();
+      void checkAndReconnect();
     };
-    
+
     const handleOffline = () => {
+      const wasConnected = isConnectedRef.current !== false;
+      isConnectedRef.current = false;
       setIsConnected(false);
-      onDisconnect?.();
+      if (wasConnected) {
+        onDisconnectRef.current?.();
+      }
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
-      if (checkTimerRef.current) clearInterval(checkTimerRef.current);
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (checkTimerRef.current !== null) {
+        clearInterval(checkTimerRef.current);
+      }
+      clearRetryTimer();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [checkInterval, checkConnection, onDisconnect]);
+  }, [checkInterval, checkAndReconnect, clearRetryTimer]);
 
-  useEffect(() => {
-    if (!isConnected && !isReconnecting) {
-      reconnect();
-    }
-  }, [isConnected, isReconnecting, reconnect]);
-
-  return { isConnected, isReconnecting, retryCount, checkConnection };
+  return {
+    isConnected: isConnected === true,
+    isDisconnected: isConnected === false,
+    isReconnecting,
+    retryCount,
+    checkConnection: checkAndReconnect,
+    retryNow: startReconnect,
+  };
 }

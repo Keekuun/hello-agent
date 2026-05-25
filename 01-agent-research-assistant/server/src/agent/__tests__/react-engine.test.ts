@@ -58,4 +58,36 @@ Final Answer: 2+2 等于 4`,
     expect(step.action?.tool).toBe('wikipedia');
     expect(step.action?.input).toEqual({ query: 'AI' });
   });
+
+  it('parseResponse treats markdown answer as final answer when format is missing', () => {
+    const engine = new ReActEngine({
+      llm: new MockLLM([]),
+      tools: [],
+      memory: new InMemoryMemory(),
+    });
+
+    const step = engine.parseResponse(`1. **OT (Operational Transformation)**
+    - **核心思想**：有一个中央大脑来协调所有操作。`);
+
+    expect(step.finalAnswer).toContain('OT (Operational Transformation)');
+    expect(step.action).toBeUndefined();
+  });
+
+  it('handles continuation task with direct answer fallback', async () => {
+    const llm = new MockLLM([
+      `1. **CRDT**
+- **核心思想**：无中心服务器，各端独立合并。`,
+    ]);
+
+    const engine = new ReActEngine({
+      llm,
+      tools: [],
+      memory: new InMemoryMemory(),
+      maxIterations: 3,
+    });
+
+    const result = await engine.run('没有返回完整，继续后续的内容');
+
+    expect(result).toContain('CRDT');
+  });
 });

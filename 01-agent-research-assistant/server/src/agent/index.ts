@@ -35,8 +35,9 @@ export class ResearchAgent {
     // 暂时禁用跨会话记忆，避免新会话有历史记忆
     // const memoryContext = await this.memoryManager.buildMemoryContext(task);
     const memoryContext = '';
+    const conversationContext = await this.buildConversationContext();
     
-    const result = await this.engine.run(task, onProgress, memoryContext);
+    const result = await this.engine.run(task, onProgress, memoryContext, conversationContext);
 
     await this.config.memory.addMessage({
       id: this.generateId(),
@@ -72,5 +73,22 @@ export class ResearchAgent {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  private async buildConversationContext(): Promise<string> {
+    const history = await this.config.memory.getHistory(12);
+    if (history.length <= 1) return '';
+
+    const priorMessages = history.slice(0, -1);
+    return priorMessages
+      .map((message) => {
+        const roleLabel = message.role === 'user' ? '用户' : '助手';
+        const content =
+          message.content.length > 1200
+            ? `${message.content.slice(0, 1200)}...`
+            : message.content;
+        return `${roleLabel}: ${content}`;
+      })
+      .join('\n\n');
   }
 }

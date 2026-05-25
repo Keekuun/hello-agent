@@ -4,6 +4,8 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { useConnection } from '../hooks/useConnection';
 import type { Skill } from '../hooks/useAgent';
+import { toast } from './Toast';
+import { toUserMessage } from '../utils/safeErrorMessage';
 
 export interface AgentStep {
   thought: string;
@@ -147,28 +149,40 @@ function ExportButton({ messages }: { messages: Message[] }) {
   );
 }
 
-function ConnectionStatus({ isConnected, isReconnecting, retryCount }: { 
-  isConnected: boolean; 
-  isReconnecting: boolean; 
+function ConnectionStatus({
+  isReconnecting,
+  retryCount,
+  onRetry,
+}: {
+  isReconnecting: boolean;
   retryCount: number;
+  onRetry: () => void;
 }) {
-  if (isConnected) return null;
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20 }}
+      key="connection-banner"
+      initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="bg-yellow-50 dark:bg-yellow-900/30 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2"
+      exit={{ opacity: 0, y: -8 }}
+      className="bg-yellow-50 dark:bg-yellow-900/30 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2 shrink-0"
     >
-      <div className="flex items-center gap-2 text-sm">
-        <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
-        <span className="text-yellow-700 dark:text-yellow-300">
-          {isReconnecting 
-            ? `正在重新连接... (${retryCount}/5)`
-            : '连接已断开，正在尝试恢复...'
-          }
-        </span>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-2 w-2 shrink-0 rounded-full bg-yellow-500 animate-pulse" />
+          <span className="text-yellow-700 dark:text-yellow-300 truncate">
+            无法连接后端服务
+            {isReconnecting && retryCount > 0 ? `（第 ${retryCount} 次重试）` : ''}
+          </span>
+        </div>
+        {!isReconnecting && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="shrink-0 text-xs text-yellow-800 dark:text-yellow-200 underline hover:no-underline"
+          >
+            立即重试
+          </button>
+        )}
       </div>
     </motion.div>
   );
@@ -207,7 +221,7 @@ function StepItem({ step, index }: { step: AgentStep; index: number }) {
       if (obj.results && Array.isArray(obj.results)) {
         return `找到 ${obj.count || obj.results.length} 条结果`;
       }
-      if (obj.error) return `❌ ${obj.error}`;
+      if (obj.error) return '❌ 工具调用失败';
       return JSON.stringify(obs).substring(0, 150) + '...';
     }
     return String(obs);
@@ -383,10 +397,17 @@ export function ChatInterface({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
 
-  const { isConnected, isReconnecting, retryCount } = useConnection({
+  const { isDisconnected, isReconnecting, retryCount, retryNow } = useConnection({
     checkInterval: 15000,
-    onConnect: () => console.log('Connected'),
-    onDisconnect: () => console.log('Disconnected'),
+    onDisconnect: () => {
+      toast.error('无法连接后端服务，请确认已在 localhost:3000 启动');
+    },
+    onConnect: () => {
+      toast.success('后端连接已恢复');
+    },
+    onReconnectFailed: () => {
+      toast.warning('自动重连失败，可点击横幅「立即重试」或检查后端日志');
+    },
   });
 
   // 保存当前会话状态
@@ -402,6 +423,9 @@ export function ChatInterface({
     state.isLoading = isLoading;
     state.taskQueue = taskQueue;
   }, [messages, pendingAnswer, pendingSteps, isTyping, isLoading, taskQueue]);
+
+  const saveCurrentSessionStateRef = useRef(saveCurrentSessionState);
+  saveCurrentSessionStateRef.current = saveCurrentSessionState;
 
   // 加载会话状态
   const loadSessionState = useCallback((sid: string) => {
@@ -460,19 +484,21 @@ export function ChatInterface({
 
   useEffect(() => {
     if (!sessionId) {
-      setMessages([]);
-      setPendingAnswer(null);
-      setPendingSteps([]);
-      setIsTyping(false);
-      setIsLoading(false);
-      setTaskQueue([]);
+      if (currentSessionIdRef.current !== null) {
+        setMessages([]);
+        setPendingAnswer(null);
+        setPendingSteps([]);
+        setIsTyping(false);
+        setIsLoading(false);
+        setTaskQueue([]);
+      }
       currentSessionIdRef.current = null;
       return;
     }
 
     if (sessionId !== currentSessionIdRef.current && !isLoadingSessionRef.current) {
       // 保存当前会话状态
-      saveCurrentSessionState();
+      saveCurrentSessionStateRef.current();
       
       isLoadingSessionRef.current = true;
       setIsSwitchingSession(true);
@@ -492,7 +518,7 @@ export function ChatInterface({
         });
       });
     }
-  }, [sessionId, loadMessages, loadSessionState, saveCurrentSessionState]);
+  }, [sessionId, loadMessages, loadSessionState]);
 
   useEffect(() => {
     onLoadingChange(isLoading);
@@ -570,8 +596,10 @@ export function ChatInterface({
     };
     
     setMessages((prev) => {
-      const updated = prev.map(m => ({ ...m, isRecallable: false }));
-      updated.push(assistantMessage);
+      const updated: Message[] = [
+        ...prev.map((m) => ({ ...m, isRecallable: false })),
+        assistantMessage,
+      ];
       messageCache.set(sid, updated);
       
       const state = getOrCreateSessionState(sid);
@@ -786,7 +814,7 @@ export function ChatInterface({
               | { complete?: boolean; result?: string; error?: string };
 
             if ('error' in data && data.error) {
-              throw new Error(data.error);
+              throw new Error(toUserMessage(new Error(data.error), '任务执行失败，请稍后重试'));
             }
 
             if ('complete' in data && data.complete && data.result) {
@@ -849,11 +877,12 @@ export function ChatInterface({
         return;
       }
       
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toUserMessage(error, '任务执行失败，请稍后重试');
+      toast.error(message);
       const errorMsg: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: `出错了: ${message}`,
+        content: message,
         timestamp: new Date().toISOString(),
         isError: true,
       };
@@ -915,11 +944,13 @@ export function ChatInterface({
   return (
     <section className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       <AnimatePresence>
-        <ConnectionStatus 
-          isConnected={isConnected} 
-          isReconnecting={isReconnecting} 
-          retryCount={retryCount} 
-        />
+        {isDisconnected && (
+          <ConnectionStatus
+            isReconnecting={isReconnecting}
+            retryCount={retryCount}
+            onRetry={retryNow}
+          />
+        )}
       </AnimatePresence>
 
       {messages.length > 0 && (
@@ -970,6 +1001,9 @@ export function ChatInterface({
                     : 'space-y-2'
                 }`}
               >
+                <span className={`block text-xs mt-1 text-slate-400 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                  {new Date(msg.timestamp).toLocaleDateString()} {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
                 {msg.role === 'user' ? (
                   <>
                     <div className="rounded-lg bg-blue-500 text-white px-4 py-3">
@@ -1038,9 +1072,6 @@ export function ChatInterface({
                     </div>
                   </>
                 )}
-                <span className={`block text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200 text-right' : 'text-slate-400'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString()}
-                </span>
               </div>
             </div>
           ))}

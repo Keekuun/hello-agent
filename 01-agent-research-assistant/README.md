@@ -14,7 +14,32 @@
 
 ## 快速开始
 
-### 1. 后端
+### 一键启动（推荐）
+
+```bash
+cd 01-agent-research-assistant
+pnpm install          # 安装根目录 dev 工具（concurrently）
+pnpm install:all      # 安装 server / client 依赖（含 better-sqlite3 原生模块）
+cp server/.env.example server/.env
+# 编辑 server/.env，填入 OPENAI_API_KEY
+pnpm dev
+```
+
+> **说明**：`better-sqlite3` 在 `server/` 目录独立安装。若 `/api/sessions` 报 bindings 或 `NODE_MODULE_VERSION` 错误，说明原生模块与当前 Node 版本不匹配，请执行：
+>
+> ```bash
+> cd server
+> pnpm install
+> ```
+>
+> 切换 Node 18 / 22 等大版本后也需要重新执行上述命令。
+
+- 后端 API：`http://localhost:3000`
+- 前端页面：`http://localhost:5173`（已代理 `/api` 到后端）
+
+### 分别启动
+
+**后端**
 
 ```bash
 cd server
@@ -24,9 +49,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-API 默认：`http://localhost:3000`
-
-### 2. 前端
+**前端**
 
 ```bash
 cd client
@@ -34,13 +57,17 @@ pnpm install
 pnpm dev
 ```
 
-浏览器打开：`http://localhost:5173`（已代理 `/api` 到后端）
-
-### 3. 测试
+### 测试
 
 ```bash
-cd server
+# 运行全部单元测试（server + client）
 pnpm test
+
+# 仅后端
+cd server && pnpm test
+
+# 仅前端
+cd client && pnpm test
 ```
 
 ### 4. Docker 部署

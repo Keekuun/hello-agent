@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "highlight.js/styles/github-dark.css";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.preview-prose pre {
+  @apply rounded-lg overflow-x-auto;
+}
+
+.preview-prose img {
+  @apply rounded-lg max-w-full;
+}

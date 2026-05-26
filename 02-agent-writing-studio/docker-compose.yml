@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: hello-agent
+      POSTGRES_PASSWORD: hello-agent
+      POSTGRES_DB: hello-agent_studio
+    volumes:
+      - hello-agent_pg_data:/var/lib/postgresql/data
+
+volumes:
+  hello-agent-pg-data:

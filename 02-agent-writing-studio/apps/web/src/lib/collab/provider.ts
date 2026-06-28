@@ -3,6 +3,12 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 
 export type CollabMode = "local" | "remote";
 
+export type CollabConnectionStatus =
+  | "local"
+  | "connecting"
+  | "synced"
+  | "disconnected";
+
 export interface CollabConnection {
   doc: Y.Doc;
   mode: CollabMode;
@@ -10,20 +16,28 @@ export interface CollabConnection {
   destroy: () => void;
 }
 
+function isCollabEnabled(): boolean {
+  return (
+    process.env.NEXT_PUBLIC_ENABLE_COLLAB === "true" ||
+    process.env.NEXT_PUBLIC_ENABLE_COLLAB === "1"
+  );
+}
+
 export function createCollabConnection(
   documentId: string,
   user: { name: string; color: string },
+  onStatusChange?: (status: CollabConnectionStatus) => void,
 ): CollabConnection {
   const doc = new Y.Doc();
-  const enableCollab =
-    process.env.NEXT_PUBLIC_ENABLE_COLLAB === "true" ||
-    process.env.NEXT_PUBLIC_ENABLE_COLLAB === "1";
   const wsUrl =
     process.env.NEXT_PUBLIC_COLLAB_WS_URL ?? "ws://localhost:1234";
 
-  if (!enableCollab) {
+  if (!isCollabEnabled()) {
+    onStatusChange?.("local");
     return { doc, mode: "local", destroy: () => doc.destroy() };
   }
+
+  onStatusChange?.("connecting");
 
   const provider = new HocuspocusProvider({
     url: wsUrl,
@@ -34,6 +48,13 @@ export function createCollabConnection(
         name: user.name,
         color: user.color,
       });
+      onStatusChange?.("connecting");
+    },
+    onSynced: () => {
+      onStatusChange?.("synced");
+    },
+    onDisconnect: () => {
+      onStatusChange?.("disconnected");
     },
   });
 

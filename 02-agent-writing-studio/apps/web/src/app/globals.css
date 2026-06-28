@@ -10,6 +10,11 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+.editor-canvas [data-slate-placeholder] {
+  color: #bbbfc4;
+  opacity: 1 !important;
+}
+
 .preview-prose pre {
   @apply rounded-lg overflow-x-auto;
 }

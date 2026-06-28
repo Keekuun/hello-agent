@@ -6,6 +6,7 @@ function textToMd(node: CustomText): string {
   if (node.bold && node.italic) t = `***${t}***`;
   else if (node.bold) t = `**${t}**`;
   else if (node.italic) t = `*${t}*`;
+  if (node.underline) t = `<u>${t}</u>`;
   return t;
 }
 
@@ -25,6 +26,10 @@ function blockToMd(block: BlockElement, listPrefix = ""): string {
       return `## ${inline}\n`;
     case "heading-three":
       return `### ${inline}\n`;
+    case "heading-four":
+      return `#### ${inline}\n`;
+    case "heading-five":
+      return `##### ${inline}\n`;
     case "blockquote":
       return `> ${inline}\n`;
     case "code-block":
@@ -86,6 +91,10 @@ export function slateToHtml(value: EditorValue): string {
           return `<h2>${inline}</h2>`;
         case "heading-three":
           return `<h3>${inline}</h3>`;
+        case "heading-four":
+          return `<h4>${inline}</h4>`;
+        case "heading-five":
+          return `<h5>${inline}</h5>`;
         case "blockquote":
           return `<blockquote>${inline}</blockquote>`;
         case "code-block":

@@ -5,6 +5,8 @@ export type BlockType =
   | "heading-one"
   | "heading-two"
   | "heading-three"
+  | "heading-four"
+  | "heading-five"
   | "bulleted-list"
   | "numbered-list"
   | "list-item"

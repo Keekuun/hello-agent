@@ -7,6 +7,8 @@ const COMMANDS: { label: string; type: BlockType; hint: string }[] = [
   { label: "标题 1", type: "heading-one", hint: "# " },
   { label: "标题 2", type: "heading-two", hint: "## " },
   { label: "标题 3", type: "heading-three", hint: "### " },
+  { label: "标题 4", type: "heading-four", hint: "#### " },
+  { label: "标题 5", type: "heading-five", hint: "##### " },
   { label: "无序列表", type: "bulleted-list", hint: "- " },
   { label: "有序列表", type: "numbered-list", hint: "1. " },
   { label: "引用", type: "blockquote", hint: "> " },
@@ -34,12 +36,12 @@ export function SlashMenu({
   if (filtered.length === 0) return null;
 
   return (
-    <div className="absolute z-50 bg-white border border-zinc-200 rounded-lg shadow-xl py-1 min-w-[200px]">
+    <div className="absolute z-50 min-w-[220px] rounded-xl border border-zinc-200 bg-white py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
       {filtered.map((cmd) => (
         <button
           key={cmd.type}
           type="button"
-          className="w-full text-left px-3 py-2 hover:bg-zinc-50 flex justify-between items-center"
+          className="flex w-full items-center justify-between px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
           onMouseDown={(e) => {
             e.preventDefault();
             onSelect(cmd.type);

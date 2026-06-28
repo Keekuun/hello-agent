@@ -5,7 +5,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "concurrently -n web,collab -c blue,magenta \"pnpm --filter web dev\" \"pnpm --filter collab-server dev\"",
+    "dev": "pnpm --filter @hello-agent/shared build && concurrently -n web,collab -c blue,magenta \"pnpm --filter web dev\" \"pnpm --filter collab-server dev\"",
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm --filter @hello-agent/shared build && pnpm --filter web build",
     "db:generate": "pnpm --filter web db:generate",

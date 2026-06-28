@@ -1,4 +1,4 @@
-import type { EditorValue } from "./types.js";
+import type { EditorValue } from "./types";
 
 export function createBlockId(): string {
   return crypto.randomUUID();

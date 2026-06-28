@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { NewDocumentButton } from "@/components/NewDocumentButton";
 
 type DocRow = {
   id: string;
@@ -23,9 +24,10 @@ export function DocumentList({ documents }: { documents: DocRow[] }) {
 
   if (documents.length === 0) {
     return (
-      <p className="text-zinc-500 text-center py-12">
-        还没有文档，点击「新建文档」开始写作。
-      </p>
+      <div className="flex flex-col items-center gap-4 py-12 text-center">
+        <p className="text-zinc-500">还没有文档，创建一篇开始写作。</p>
+        <NewDocumentButton variant="primary">新建文档</NewDocumentButton>
+      </div>
     );
   }
 

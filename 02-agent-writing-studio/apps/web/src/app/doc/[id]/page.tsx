@@ -26,6 +26,7 @@ export default async function DocPage({ params }: Props) {
         coverUrl: doc.coverUrl,
         tags: (doc.tags as string[]) ?? [],
         content: doc.content as EditorValue,
+        updatedAt: doc.updatedAt,
       }}
     />
   );

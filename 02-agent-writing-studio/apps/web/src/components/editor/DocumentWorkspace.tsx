@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import type { EditorValue } from "@hello-agent/shared";
 import { exportMarkdown, slateToHtml } from "@/lib/slate/markdown";
+import { NewDocumentButton } from "@/components/NewDocumentButton";
 import { SlateEditor } from "./SlateEditor";
 import { PreviewPane } from "./PreviewPane";
 import { DocumentMetaPanel } from "./DocumentMetaPanel";
@@ -11,6 +12,14 @@ import { AiPanel } from "@/components/ai/AiPanel";
 import type { DocumentStatus } from "@hello-agent/shared";
 
 type ViewMode = "edit" | "split" | "preview";
+
+function formatUpdatedAt(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString("zh-CN", {
+    month: "long",
+    day: "numeric",
+  }) + "修改";
+}
 
 export function DocumentWorkspace({
   documentId,
@@ -26,6 +35,7 @@ export function DocumentWorkspace({
     coverUrl: string | null;
     tags: string[];
     content: EditorValue;
+    updatedAt: Date | string;
   };
   userName: string;
 }) {
@@ -33,7 +43,7 @@ export function DocumentWorkspace({
     initialDoc.content as EditorValue,
   );
   const [title, setTitle] = useState(initialDoc.title);
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [meta, setMeta] = useState({
     slug: initialDoc.slug,
     status: initialDoc.status,
@@ -124,25 +134,26 @@ export function DocumentWorkspace({
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white">
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 shrink-0">
-        <Link href="/" className="text-zinc-500 hover:text-zinc-800 text-sm">
-          ← 文档
+    <div className="flex h-screen flex-col bg-[#f5f6f7]">
+      <header className="flex shrink-0 items-center gap-3 border-b border-zinc-200/80 bg-white px-4 py-2.5">
+        <Link
+          href="/"
+          className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+        >
+          ← 文档列表
         </Link>
-        <input
-          className="flex-1 text-lg font-semibold outline-none"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={saveMeta}
-        />
-        <div className="flex gap-1 text-sm">
+        <NewDocumentButton>新建</NewDocumentButton>
+        <div className="flex-1" />
+        <div className="flex gap-1 rounded-lg bg-zinc-100 p-0.5 text-sm">
           {(["edit", "split", "preview"] as ViewMode[]).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setViewMode(m)}
-              className={`px-2 py-1 rounded ${
-                viewMode === m ? "bg-zinc-900 text-white" : "hover:bg-zinc-100"
+              className={`rounded-md px-3 py-1 transition-colors ${
+                viewMode === m
+                  ? "bg-white text-zinc-900 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-700"
               }`}
             >
               {m === "edit" ? "编辑" : m === "split" ? "分屏" : "预览"}
@@ -151,33 +162,53 @@ export function DocumentWorkspace({
         </div>
         <Link
           href={`/doc/${documentId}/preview`}
-          className="text-sm text-zinc-600 hover:underline"
+          className="text-sm text-zinc-500 hover:text-zinc-800"
         >
-          阅读模式
+          阅读
         </Link>
-        <button type="button" onClick={exportMd} className="text-sm px-2 py-1 border rounded">
-          导出 MD
-        </button>
-        <button type="button" onClick={exportHtml} className="text-sm px-2 py-1 border rounded">
-          导出 HTML
-        </button>
-        <button type="button" onClick={copyMd} className="text-sm px-2 py-1 border rounded">
-          复制 MD
-        </button>
+        <details className="relative">
+          <summary className="cursor-pointer list-none rounded-md border border-zinc-200 px-3 py-1 text-sm text-zinc-600 hover:bg-zinc-50">
+            更多
+          </summary>
+          <div className="absolute right-0 top-full z-20 mt-1 w-36 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+            <button type="button" onClick={exportMd} className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-50">
+              导出 Markdown
+            </button>
+            <button type="button" onClick={exportHtml} className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-50">
+              导出 HTML
+            </button>
+            <button type="button" onClick={copyMd} className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-50">
+              复制 Markdown
+            </button>
+          </div>
+        </details>
       </header>
 
-      <div className="flex-1 flex min-h-0">
+      <div className="flex min-h-0 flex-1">
         {(viewMode === "edit" || viewMode === "split") && (
           <div
-            className={`${viewMode === "split" ? "w-1/2 border-r" : "w-full"} flex flex-col min-h-0`}
+            className={`flex min-h-0 flex-col bg-white ${
+              viewMode === "split" ? "w-1/2 border-r border-zinc-200" : "w-full"
+            }`}
           >
+            <div className="border-b border-zinc-100 px-16 pt-8 pb-2">
+              <input
+                className="w-full border-none bg-transparent text-[34px] font-semibold leading-tight text-zinc-900 outline-none placeholder:text-zinc-300"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={saveMeta}
+                placeholder="无标题文档"
+              />
+            </div>
             <SlateEditor
+              key={documentId}
               documentId={documentId}
-              initialValue={content}
+              initialValue={initialDoc.content as EditorValue}
               onChange={setContent}
               onSave={saveContent}
               highlightedBlockIds={highlightedIds}
               userName={userName}
+              updatedAt={formatUpdatedAt(initialDoc.updatedAt)}
             />
           </div>
         )}

@@ -24,4 +24,6 @@ export const HEADING_TYPES = [
   "heading-one",
   "heading-two",
   "heading-three",
+  "heading-four",
+  "heading-five",
 ] as const;

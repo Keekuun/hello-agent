@@ -58,8 +58,8 @@ docker compose up -d
 # 安装依赖
 pnpm install
 
-# 配置环境（放在 monorepo 根目录，Next 会自动加载）
-cp .env.example .env.local
+# 配置环境（复制到 apps/web/.env.local）
+cp .env.example apps/web/.env.local
 # 编辑 .env.local
 
 # 推送数据库 schema

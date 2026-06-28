@@ -11,4 +11,4 @@ services:
       - hello-agent_pg_data:/var/lib/postgresql/data
 
 volumes:
-  hello-agent-pg-data:
+  hello-agent_pg_data:

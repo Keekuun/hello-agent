@@ -1,10 +1,55 @@
-import { Editor, Element, Transforms } from "slate";
+import { Editor, Element, Point, Range, Transforms } from "slate";
 import { createBlockId } from "@hello-agent/shared";
 import type { BlockElement, BlockType } from "@hello-agent/shared";
 import { HEADING_TYPES, LIST_TYPES } from "./types";
 
+const VOID_BLOCK_TYPES = new Set<BlockType>(["divider", "image"]);
+
+export function selectAllDocument(editor: Editor) {
+  Transforms.select(editor, {
+    anchor: Editor.start(editor, []),
+    focus: Editor.end(editor, []),
+  });
+}
+
+export function shouldClearDocumentOnDelete(editor: Editor): boolean {
+  const { selection } = editor;
+  if (!selection || Range.isCollapsed(selection)) return false;
+
+  const blockStart = Editor.start(editor, [0]);
+  const blockEnd = Editor.end(editor, [editor.children.length - 1]);
+  const [start, end] = Range.edges(selection);
+
+  return Point.equals(start, blockStart) && Point.equals(end, blockEnd);
+}
+
+export function resetDocumentToEmptyParagraph(editor: Editor) {
+  const emptyBlock: BlockElement = {
+    id: createBlockId(),
+    type: "paragraph",
+    children: [{ text: "" }],
+  };
+
+  Editor.withoutNormalizing(editor, () => {
+    while (editor.children.length > 0) {
+      Transforms.removeNodes(editor, { at: [0] });
+    }
+    Transforms.insertNodes(editor, emptyBlock, { at: [0] });
+  });
+
+  Transforms.select(editor, Editor.start(editor, [0]));
+}
+
 export function withBlocks<T extends Editor>(editor: T): T {
-  const { insertBreak, normalizeNode } = editor;
+  const { insertBreak, normalizeNode, isVoid } = editor;
+
+  editor.isVoid = (element) => {
+    const block = element as BlockElement;
+    if (VOID_BLOCK_TYPES.has(block.type)) {
+      return true;
+    }
+    return isVoid(element);
+  };
 
   editor.insertBreak = () => {
     const [match] = Editor.nodes(editor, {
@@ -116,6 +161,8 @@ export function getHeadingLevel(type: BlockType): number | null {
   if (type === "heading-one") return 1;
   if (type === "heading-two") return 2;
   if (type === "heading-three") return 3;
+  if (type === "heading-four") return 4;
+  if (type === "heading-five") return 5;
   return null;
 }
 

@@ -7,6 +7,11 @@ interface MemoryExtract {
   importance: number;
 }
 
+const MIN_IMPORTANCE_TO_SAVE = 5;
+const MAX_MEMORIES_IN_CONTEXT = 5;
+const MIN_RESPONSE_LENGTH_FOR_EXTRACT = 40;
+const TRIVIAL_TASK_PATTERN = /^(你好|您好|hi|hello|hey|测试|test|ping)[!！.。\s]*$/i;
+
 export class MemoryManager {
   private memory: SQLiteMemory;
   private llm: LLMClient;
@@ -17,6 +22,14 @@ export class MemoryManager {
   }
 
   async extractAndSaveMemories(userMessage: string, assistantResponse: string): Promise<void> {
+    if (TRIVIAL_TASK_PATTERN.test(userMessage.trim())) {
+      return;
+    }
+
+    if (assistantResponse.trim().length < MIN_RESPONSE_LENGTH_FOR_EXTRACT) {
+      return;
+    }
+
     try {
       const extractPrompt = `从以下对话中提取关键信息，用于长期记忆。这些信息应该对未来的对话有用。
 
@@ -33,7 +46,9 @@ export class MemoryManager {
 [
   {"content": "用户是一名前端开发者", "keywords": ["前端", "开发者", "职业"], "importance": 8},
   {"content": "用户正在学习 React", "keywords": ["React", "学习", "前端"], "importance": 7}
-]`;
+]
+
+若没有值得长期保存的信息，返回空数组 []。`;
 
       const response = await this.llm.generate(extractPrompt, {
         temperature: 0.3,
@@ -41,17 +56,19 @@ export class MemoryManager {
       });
 
       const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const extracts: MemoryExtract[] = JSON.parse(jsonMatch[0]);
-        
-        for (const extract of extracts) {
-          if (extract.content && extract.importance >= 5) {
-            await this.memory.addMemory(
-              extract.content,
-              extract.keywords || [],
-              extract.importance
-            );
-          }
+      if (!jsonMatch) {
+        return;
+      }
+
+      const extracts: MemoryExtract[] = JSON.parse(jsonMatch[0]);
+
+      for (const extract of extracts) {
+        if (extract.content && extract.importance >= MIN_IMPORTANCE_TO_SAVE) {
+          await this.memory.addMemory(
+            extract.content,
+            extract.keywords || [],
+            extract.importance
+          );
         }
       }
     } catch (error) {
@@ -60,25 +77,20 @@ export class MemoryManager {
   }
 
   async getRelevantMemories(query: string): Promise<string[]> {
-    const memories = await this.memory.searchMemories(query, 5);
-    return memories.map(m => m.content);
+    const memories = await this.memory.searchMemories(query, MAX_MEMORIES_IN_CONTEXT);
+    return memories.map((memory) => memory.content);
   }
 
-  async getRecentContext(): Promise<string[]> {
-    const memories = await this.memory.getRecentMemories(5);
-    return memories.map(m => m.content);
-  }
-
+  /**
+   * 仅注入与当前任务相关的记忆，避免把无关的近期记忆塞进新会话。
+   */
   async buildMemoryContext(task: string): Promise<string> {
     const relevantMemories = await this.getRelevantMemories(task);
-    const recentContext = await this.getRecentContext();
-    
-    const allMemories = [...new Set([...relevantMemories, ...recentContext])];
-    
-    if (allMemories.length === 0) {
+
+    if (relevantMemories.length === 0) {
       return '';
     }
 
-    return `\n相关记忆（来自之前的对话）:\n${allMemories.map(m => `- ${m}`).join('\n')}\n`;
+    return `\n相关记忆（来自之前的对话）:\n${relevantMemories.map((memory) => `- ${memory}`).join('\n')}\n`;
   }
 }

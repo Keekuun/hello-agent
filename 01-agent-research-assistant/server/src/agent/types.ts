@@ -11,6 +11,7 @@ export interface ReActStep {
   action?: {
     tool: string;
     input: unknown;
+    toolCallId?: string;
   };
   observation?: unknown;
   finalAnswer?: string;
@@ -43,22 +44,51 @@ export interface AgentConfig {
   memory: MemorySystem;
   maxIterations?: number;
   temperature?: number;
+  /** 默认 true：优先使用 LLM 原生 Function Calling */
+  useFunctionCalling?: boolean;
+}
+
+export interface ToolCallRequest {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface LLMToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: ToolParameterSchema;
+  };
+}
+
+export interface LLMChatResult {
+  content: string | null;
+  toolCalls?: ToolCallRequest[];
 }
 
 export interface LLMClient {
   generate(prompt: string, options?: LLMOptions): Promise<string>;
   chat(messages: ChatMessage[], options?: LLMOptions): Promise<string>;
+  /** 可选：原生 Function Calling；未实现时 ReAct 回退到文本解析 */
+  chatWithTools?(messages: ChatMessage[], options?: LLMOptions): Promise<LLMChatResult>;
 }
 
 export interface LLMOptions {
   temperature?: number;
   maxTokens?: number;
   model?: string;
+  tools?: LLMToolDefinition[];
+  toolChoice?: 'auto' | 'none' | 'required';
 }
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: ToolCallRequest[];
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface MemorySystem {

@@ -108,7 +108,7 @@ function createAgent(sessionId: string): ResearchAgent {
 
 ### 3.1 ResearchAgent (agent/index.ts)
 
-**职责**: 编排器，协调 LLM、Tools 和 Memory
+**职责**: 编排器，协调 LLM、Tools 和 Memory。推理默认优先 Function Calling，失败时回退文本解析。
 
 ```typescript
 export class ResearchAgent {

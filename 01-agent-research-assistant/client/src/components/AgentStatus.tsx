@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { AgentStep } from './ChatInterface';
-import type { Session, Skill } from '../hooks/useAgent';
+import type { MemoryItem, Session, Skill } from '../hooks/useAgent';
 
 interface AgentStatusProps {
   sessionId: string | null;
@@ -10,30 +10,39 @@ interface AgentStatusProps {
   isLoading: boolean;
   sessions: Session[];
   skills: Skill[];
+  memories: MemoryItem[];
   onCreateSession: (title?: string) => Promise<string | null>;
   onSwitchSession: (id: string) => Promise<string | null>;
   onDeleteSession: (id: string) => Promise<void>;
   onRenameSession: (id: string, title: string) => Promise<void>;
   onSelectSkill: (skill: Skill) => void;
+  onDeleteMemory: (id: string) => Promise<void>;
+  onClearMemories: () => Promise<void>;
+  onRefreshMemories: () => Promise<void>;
 }
+
+type SidebarTab = 'sessions' | 'skills' | 'memories';
 
 export function AgentStatus({
   sessionId,
   sessionError,
-  steps,
-  isLoading,
   sessions,
   skills,
+  memories,
   onCreateSession,
   onSwitchSession,
   onDeleteSession,
   onRenameSession,
   onSelectSkill,
+  onDeleteMemory,
+  onClearMemories,
+  onRefreshMemories,
 }: AgentStatusProps) {
-  const [activeTab, setActiveTab] = useState<'sessions' | 'skills'>('sessions');
+  const [activeTab, setActiveTab] = useState<SidebarTab>('sessions');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmClearMemories, setConfirmClearMemories] = useState(false);
 
   const handleStartEdit = (session: Session) => {
     setEditingId(session.id);
@@ -62,11 +71,20 @@ export function AgentStatus({
       setConfirmDeleteId(null);
     } else {
       setConfirmDeleteId(id);
-      // 5秒后自动取消确认状态
       setTimeout(() => {
         setConfirmDeleteId((current) => current === id ? null : current);
       }, 5000);
     }
+  };
+
+  const handleClearMemories = async () => {
+    if (!confirmClearMemories) {
+      setConfirmClearMemories(true);
+      setTimeout(() => setConfirmClearMemories(false), 5000);
+      return;
+    }
+    await onClearMemories();
+    setConfirmClearMemories(false);
   };
 
   const formatDate = (dateStr: string) => {
@@ -86,28 +104,24 @@ export function AgentStatus({
     }
   };
 
+  const tabClass = (tab: SidebarTab) =>
+    `flex-1 px-2 py-3 text-sm font-medium transition-colors ${
+      activeTab === tab
+        ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+    }`;
+
   return (
     <aside className="flex h-[calc(100vh-8rem)] flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
       <div className="flex border-b border-slate-200 dark:border-slate-700">
-        <button
-          onClick={() => setActiveTab('sessions')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'sessions'
-              ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-          }`}
-        >
-          会话历史
+        <button onClick={() => setActiveTab('sessions')} className={tabClass('sessions')}>
+          会话
         </button>
-        <button
-          onClick={() => setActiveTab('skills')}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-            activeTab === 'skills'
-              ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-          }`}
-        >
-          技能库
+        <button onClick={() => setActiveTab('memories')} className={tabClass('memories')}>
+          记忆
+        </button>
+        <button onClick={() => setActiveTab('skills')} className={tabClass('skills')}>
+          技能
         </button>
       </div>
 
@@ -231,6 +245,95 @@ export function AgentStatus({
               {sessions.length === 0 && (
                 <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
                   暂无会话，点击上方创建
+                </div>
+              )}
+            </div>
+          </div>
+        ) : activeTab === 'memories' ? (
+          <div className="p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                跨会话长期记忆 · {memories.length} 条
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void onRefreshMemories()}
+                  className="px-2 py-1 text-xs rounded text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  title="刷新"
+                >
+                  刷新
+                </button>
+                {memories.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleClearMemories()}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      confirmClearMemories
+                        ? 'bg-red-500 text-white hover:bg-red-600'
+                        : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-500'
+                    }`}
+                    title={confirmClearMemories ? '再次点击确认清空' : '清空全部'}
+                  >
+                    {confirmClearMemories ? '确认清空' : '清空'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <AnimatePresence>
+                {memories.map((memory) => (
+                  <motion.div
+                    key={memory.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    className="group rounded-lg border border-slate-200 dark:border-slate-700 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
+                        {memory.content}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void onDeleteMemory(memory.id)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        title="删除这条记忆"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1 min-w-0">
+                        {(memory.keywords || '')
+                          .split(',')
+                          .map((keyword) => keyword.trim())
+                          .filter(Boolean)
+                          .slice(0, 4)
+                          .map((keyword) => (
+                            <span
+                              key={`${memory.id}-${keyword}`}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                      </div>
+                      <span className="shrink-0 text-[10px] text-slate-400">
+                        重要度 {memory.importance}
+                      </span>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {memories.length === 0 && (
+                <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
+                  暂无长期记忆
+                  <p className="mt-1 text-xs">对话后会自动提取可复用信息</p>
                 </div>
               )}
             </div>

@@ -228,6 +228,58 @@ router.delete('/sessions/:sessionId', async (req, res) => {
   }
 });
 
+// 获取长期记忆列表
+router.get('/memories', (_req, res) => {
+  try {
+    const db = getDb();
+    initializeDatabaseSchema(db);
+    const limit = 50;
+    const memories = db.prepare(`
+      SELECT id, session_id, content, keywords, importance, created_at
+      FROM memories
+      ORDER BY importance DESC, created_at DESC
+      LIMIT ?
+    `).all(limit);
+    db.close();
+    res.json(memories);
+  } catch (error) {
+    respondWithError(res, 500, 'GET /memories', error, PublicError.LOAD_MEMORIES_FAILED);
+  }
+});
+
+// 删除单条长期记忆
+router.delete('/memories/:memoryId', (req, res) => {
+  try {
+    const { memoryId } = req.params;
+    const db = getDb();
+    initializeDatabaseSchema(db);
+    const result = db.prepare('DELETE FROM memories WHERE id = ?').run(memoryId);
+    db.close();
+
+    if (result.changes === 0) {
+      res.status(404).json({ error: PublicError.MEMORY_NOT_FOUND });
+      return;
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    respondWithError(res, 500, 'DELETE /memories/:memoryId', error, PublicError.DELETE_MEMORY_FAILED);
+  }
+});
+
+// 清空全部长期记忆
+router.delete('/memories', (_req, res) => {
+  try {
+    const db = getDb();
+    initializeDatabaseSchema(db);
+    db.prepare('DELETE FROM memories').run();
+    db.close();
+    res.json({ ok: true });
+  } catch (error) {
+    respondWithError(res, 500, 'DELETE /memories', error, PublicError.CLEAR_MEMORIES_FAILED);
+  }
+});
+
 // 获取技能列表
 router.get('/skills', (_req, res) => {
   const skills = [

@@ -419,7 +419,7 @@ User → Manager Agent → Researcher Agent → ...
 Phase 1: 核心增强
     - ✅ Function Calling 替代文本解析（已完成，保留回退）
     - 添加 RAG 知识库
-    - 错误重试机制
+    - ✅ 错误重试机制（LLM / 工具，指数退避）
     │
     ▼
 Phase 2: 框架升级

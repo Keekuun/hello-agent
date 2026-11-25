@@ -134,7 +134,7 @@ cd client && pnpm install && pnpm dev
 
 | 阶段 | 重点 |
 |------|------|
-| **Phase 1** | Function Calling、RAG、错误重试 |
+| **Phase 1** | Function Calling、RAG、错误重试（✅ 错误重试已完成） |
 | **Phase 2** | LangGraph、MCP 协议、向量数据库 |
 | **Phase 3** | 用户认证、监控日志、高可用部署 |
 | **Phase 4** | 多 Agent 协作、可视化编排、自动评估 |

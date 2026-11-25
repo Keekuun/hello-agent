@@ -6,6 +6,11 @@ import { useConnection } from '../hooks/useConnection';
 import type { Skill } from '../hooks/useAgent';
 import { toast } from './Toast';
 import { toUserMessage } from '../utils/safeErrorMessage';
+import {
+  buildMarkdownExport,
+  downloadTextFile,
+  openPrintablePdf,
+} from '../utils/exportConversation';
 
 export interface AgentStep {
   thought: string;
@@ -114,38 +119,74 @@ function CopyButton({ content, className = '' }: { content: string; className?: 
 }
 
 function ExportButton({ messages }: { messages: Message[] }) {
-  const handleExportMarkdown = () => {
-    const md = messages.map(msg => {
-      const time = new Date(msg.timestamp).toLocaleString('zh-CN');
-      if (msg.role === 'user') {
-        return `## 用户\n*${time}*\n\n${msg.content}\n`;
-      } else {
-        return `## 助手\n*${time}*\n\n${msg.content}\n`;
-      }
-    }).join('\n---\n\n');
-
-    const blob = new Blob([md], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `对话记录_${new Date().toLocaleDateString('zh-CN')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const [open, setOpen] = useState(false);
 
   if (messages.length === 0) return null;
 
+  const dateLabel = new Date().toLocaleDateString('zh-CN');
+  const exportable = messages.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+    timestamp: msg.timestamp,
+  }));
+
+  const handleExportMarkdown = () => {
+    const md = buildMarkdownExport(exportable);
+    downloadTextFile(md, `对话记录_${dateLabel}.md`, 'text/markdown;charset=utf-8');
+    setOpen(false);
+  };
+
+  const handleExportPdf = () => {
+    const ok = openPrintablePdf(exportable, `对话记录_${dateLabel}`);
+    if (!ok) {
+      toast.warning('无法打开打印窗口，请检查浏览器是否拦截了弹窗');
+    }
+    setOpen(false);
+  };
+
   return (
-    <button
-      onClick={handleExportMarkdown}
-      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
-      title="导出为 Markdown"
-    >
-      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-      <span>导出</span>
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+        title="导出对话"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>导出</span>
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-10 cursor-default"
+            aria-label="关闭导出菜单"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg py-1">
+            <button
+              type="button"
+              onClick={handleExportMarkdown}
+              className="w-full text-left px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              导出 Markdown
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="w-full text-left px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              导出 PDF（打印）
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -385,7 +426,7 @@ export function ChatInterface({
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
   const [pendingSteps, setPendingSteps] = useState<AgentStep[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [, setShowScrollButton] = useState(false);
   const [isSwitchingSession, setIsSwitchingSession] = useState(false);
   const [taskQueue, setTaskQueue] = useState<string[]>([]);
   const [showQueue, setShowQueue] = useState(false);

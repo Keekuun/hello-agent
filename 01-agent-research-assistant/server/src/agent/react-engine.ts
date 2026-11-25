@@ -6,17 +6,23 @@ import {
   ToolCallRequest,
 } from './types';
 import { ToolRegistry } from '../tools';
+import { getRetryConfigFromEnv, withRetry } from '../utils/retry';
 
 export class ReActEngine {
   private config: AgentConfig;
   private tools: ToolRegistry;
   private maxIterations: number;
+  private toolRetryAttempts: number;
+  private toolRetryDelayMs: number;
   private useFunctionCalling: boolean;
 
   constructor(config: AgentConfig) {
     this.config = config;
     this.tools = new ToolRegistry(config.tools);
     this.maxIterations = config.maxIterations ?? 10;
+    const retryConfig = getRetryConfigFromEnv();
+    this.toolRetryAttempts = retryConfig.maxAttempts;
+    this.toolRetryDelayMs = retryConfig.initialDelayMs;
     this.useFunctionCalling = config.useFunctionCalling !== false;
   }
 
@@ -432,7 +438,18 @@ Thought:`.trim();
     }
 
     try {
-      return await tool.execute(action.input);
+      return await withRetry(
+        async (attempt) => {
+          if (attempt > 1) {
+            console.warn(`工具 ${action.tool} 重试第 ${attempt} 次`);
+          }
+          return tool.execute(action.input);
+        },
+        {
+          maxAttempts: this.toolRetryAttempts,
+          initialDelayMs: this.toolRetryDelayMs,
+        }
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {

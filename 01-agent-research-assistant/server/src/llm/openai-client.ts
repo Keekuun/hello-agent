@@ -6,25 +6,42 @@ import {
   LLMChatResult,
   ToolCallRequest,
 } from '../agent/types';
+import { getRetryConfigFromEnv, withRetry } from '../utils/retry';
 
 export class OpenAIClient implements LLMClient {
   private client: OpenAI;
   private defaultModel: string;
+  private maxAttempts: number;
+  private initialDelayMs: number;
 
   constructor(apiKey: string, model = 'gpt-4o-mini', baseURL?: string) {
     this.client = new OpenAI({ apiKey, baseURL });
     this.defaultModel = model;
+    const retryConfig = getRetryConfigFromEnv();
+    this.maxAttempts = retryConfig.maxAttempts;
+    this.initialDelayMs = retryConfig.initialDelayMs;
   }
 
   async generate(prompt: string, options?: LLMOptions): Promise<string> {
-    const completion = await this.client.chat.completions.create({
-      model: options?.model || this.defaultModel,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
-    });
+    return withRetry(
+      async (attempt) => {
+        if (attempt > 1) {
+          console.warn(`LLM generate 重试第 ${attempt} 次`);
+        }
+        const completion = await this.client.chat.completions.create({
+          model: options?.model || this.defaultModel,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 2000,
+        });
 
-    return completion.choices[0]?.message?.content ?? '';
+        return completion.choices[0]?.message?.content ?? '';
+      },
+      {
+        maxAttempts: this.maxAttempts,
+        initialDelayMs: this.initialDelayMs,
+      }
+    );
   }
 
   async chat(messages: ChatMessage[], options?: LLMOptions): Promise<string> {
@@ -37,34 +54,46 @@ export class OpenAIClient implements LLMClient {
   }
 
   async chatWithTools(messages: ChatMessage[], options?: LLMOptions): Promise<LLMChatResult> {
-    const tools =
-      options?.tools && options.tools.length > 0
-        ? (options.tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[])
-        : undefined;
+    return withRetry(
+      async (attempt) => {
+        if (attempt > 1) {
+          console.warn(`LLM chatWithTools 重试第 ${attempt} 次`);
+        }
 
-    const completion = await this.client.chat.completions.create({
-      model: options?.model || this.defaultModel,
-      messages: messages.map((message) => this.toApiMessage(message)),
-      temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
-      ...(tools
-        ? {
-            tools,
-            tool_choice: options?.toolChoice ?? 'auto',
-          }
-        : {}),
-    });
+        const tools =
+          options?.tools && options.tools.length > 0
+            ? (options.tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[])
+            : undefined;
 
-    const message = completion.choices[0]?.message;
-    if (!message) {
-      return { content: null };
-    }
+        const completion = await this.client.chat.completions.create({
+          model: options?.model || this.defaultModel,
+          messages: messages.map((message) => this.toApiMessage(message)),
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 2000,
+          ...(tools
+            ? {
+                tools,
+                tool_choice: options?.toolChoice ?? 'auto',
+              }
+            : {}),
+        });
 
-    const toolCalls = this.parseToolCalls(message.tool_calls);
-    return {
-      content: message.content ?? null,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
+        const message = completion.choices[0]?.message;
+        if (!message) {
+          return { content: null };
+        }
+
+        const toolCalls = this.parseToolCalls(message.tool_calls);
+        return {
+          content: message.content ?? null,
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        };
+      },
+      {
+        maxAttempts: this.maxAttempts,
+        initialDelayMs: this.initialDelayMs,
+      }
+    );
   }
 
   private toApiMessage(

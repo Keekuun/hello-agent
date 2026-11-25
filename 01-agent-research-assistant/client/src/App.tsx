@@ -8,12 +8,16 @@ export default function App() {
     sessionId,
     sessions,
     skills,
+    memories,
     error,
     createSession,
     switchSession,
     deleteSession,
     renameSession,
     fetchSessions,
+    fetchMemories,
+    deleteMemory,
+    clearMemories,
   } = useAgent();
   
   const [steps, setSteps] = useState<AgentStep[]>([]);
@@ -91,7 +95,10 @@ export default function App() {
           onLoadingChange={handleLoadingChange}
           selectedSkill={selectedSkill}
           onSkillUsed={() => setSelectedSkill(null)}
-          onSessionUpdate={fetchSessions}
+          onSessionUpdate={() => {
+            void fetchSessions();
+            void fetchMemories();
+          }}
         />
         <div className="hidden lg:block">
           <AgentStatus
@@ -101,11 +108,15 @@ export default function App() {
             isLoading={isLoading}
             sessions={sessions}
             skills={skills}
+            memories={memories}
             onCreateSession={createSession}
             onSwitchSession={switchSession}
             onDeleteSession={deleteSession}
             onRenameSession={renameSession}
             onSelectSkill={handleSelectSkill}
+            onDeleteMemory={deleteMemory}
+            onClearMemories={clearMemories}
+            onRefreshMemories={fetchMemories}
           />
         </div>
       </main>

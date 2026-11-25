@@ -11,6 +11,10 @@ export const PublicError = {
   UPDATE_SESSION_FAILED: '更新会话失败，请稍后重试',
   LOAD_HISTORY_FAILED: '无法加载历史消息',
   DELETE_SESSION_FAILED: '删除会话失败，请稍后重试',
+  LOAD_MEMORIES_FAILED: '无法加载长期记忆',
+  DELETE_MEMORY_FAILED: '删除记忆失败，请稍后重试',
+  CLEAR_MEMORIES_FAILED: '清空记忆失败，请稍后重试',
+  MEMORY_NOT_FOUND: '记忆不存在或已删除',
 } as const;
 
 export function logServerError(context: string, error: unknown): void {

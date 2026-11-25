@@ -15,6 +15,12 @@ export const PublicError = {
   DELETE_MEMORY_FAILED: '删除记忆失败，请稍后重试',
   CLEAR_MEMORIES_FAILED: '清空记忆失败，请稍后重试',
   MEMORY_NOT_FOUND: '记忆不存在或已删除',
+  LOAD_DOCUMENTS_FAILED: '无法加载知识库文档',
+  UPLOAD_DOCUMENT_FAILED: '上传文档失败，请检查格式与内容后重试',
+  DELETE_DOCUMENT_FAILED: '删除文档失败，请稍后重试',
+  CLEAR_DOCUMENTS_FAILED: '清空知识库失败，请稍后重试',
+  DOCUMENT_NOT_FOUND: '文档不存在或已删除',
+  DOCUMENT_CONTENT_REQUIRED: '请提供文档标题与内容',
 } as const;
 
 export function logServerError(context: string, error: unknown): void {

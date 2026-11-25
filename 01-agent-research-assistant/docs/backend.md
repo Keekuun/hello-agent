@@ -550,6 +550,17 @@ export class FileTool implements Tool {
 
 相关 API：`GET /api/memories`、`DELETE /api/memories/:id`、`DELETE /api/memories`。
 
+### 6.0.1 RAG 知识库
+
+| 表 | 作用 |
+|------|------|
+| `documents` | 文档元数据（标题、文件名、字数、切块数） |
+| `document_chunks` | 切块正文 + 关键词，供检索打分 |
+
+流程：上传文本 → 按约 800 字切块（含重叠）→ 关键词索引 → 对话时自动注入 Top-K 片段；Agent 也可调用 `knowledge_search` 主动检索。
+
+相关 API：`POST/GET/DELETE /api/documents`、`DELETE /api/documents/:id`。
+
 ### 6.1 SQLite 记忆
 
 ```typescript

@@ -14,7 +14,7 @@ const dataDir = path.resolve(process.cwd(), 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use('/api', apiRoutes);
 
 app.get('/health', (_req, res) => {

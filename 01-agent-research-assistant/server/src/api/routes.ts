@@ -6,6 +6,8 @@ import { ResearchAgent } from '../agent';
 import { OpenAIClient } from '../llm/openai-client';
 import { SQLiteMemory } from '../agent/memory';
 import { initializeDatabaseSchema, listSessions } from '../db/schema';
+import { KnowledgeBase } from '../knowledge/knowledge-base';
+import { KnowledgeSearchTool } from '../tools/knowledge-search';
 import { logServerError, PublicError, respondWithError, writeSseError } from './http-error';
 
 const router = express.Router();
@@ -25,7 +27,8 @@ function getDb(): Database.Database {
 }
 
 function createAgent(sessionId: string): ResearchAgent {
-  const memory = new SQLiteMemory(getDatabasePath(), sessionId);
+  const dbPath = getDatabasePath();
+  const memory = new SQLiteMemory(dbPath, sessionId);
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
@@ -37,11 +40,12 @@ function createAgent(sessionId: string): ResearchAgent {
   return new ResearchAgent(
     {
       llm,
-      tools: [],
+      tools: [new KnowledgeSearchTool(dbPath)],
       memory,
       maxIterations: Number(process.env.MAX_ITERATIONS ?? 10),
     },
-    sessionId
+    sessionId,
+    dbPath
   );
 }
 
@@ -277,6 +281,96 @@ router.delete('/memories', (_req, res) => {
     res.json({ ok: true });
   } catch (error) {
     respondWithError(res, 500, 'DELETE /memories', error, PublicError.CLEAR_MEMORIES_FAILED);
+  }
+});
+
+// 上传知识库文档（前端 FileReader 读文本后以 JSON 提交）
+router.post('/documents', (req, res) => {
+  try {
+    const { title, content, filename, mimeType } = req.body as {
+      title?: string;
+      content?: string;
+      filename?: string;
+      mimeType?: string;
+    };
+
+    if (!content?.trim()) {
+      res.status(400).json({ error: PublicError.DOCUMENT_CONTENT_REQUIRED });
+      return;
+    }
+
+    const knowledgeBase = new KnowledgeBase(getDatabasePath());
+    try {
+      const document = knowledgeBase.addDocument({
+        title: title?.trim() || filename || '未命名文档',
+        content,
+        filename,
+        mimeType,
+      });
+      res.status(201).json(document);
+    } finally {
+      knowledgeBase.close();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (
+      message.includes('不支持的文件类型') ||
+      message.includes('文档内容不能为空') ||
+      message.includes('文档过长')
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    respondWithError(res, 500, 'POST /documents', error, PublicError.UPLOAD_DOCUMENT_FAILED);
+  }
+});
+
+// 知识库文档列表
+router.get('/documents', (_req, res) => {
+  try {
+    const knowledgeBase = new KnowledgeBase(getDatabasePath());
+    try {
+      res.json(knowledgeBase.listDocuments());
+    } finally {
+      knowledgeBase.close();
+    }
+  } catch (error) {
+    respondWithError(res, 500, 'GET /documents', error, PublicError.LOAD_DOCUMENTS_FAILED);
+  }
+});
+
+// 删除单个知识库文档
+router.delete('/documents/:documentId', (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const knowledgeBase = new KnowledgeBase(getDatabasePath());
+    try {
+      const deleted = knowledgeBase.deleteDocument(documentId);
+      if (!deleted) {
+        res.status(404).json({ error: PublicError.DOCUMENT_NOT_FOUND });
+        return;
+      }
+      res.json({ ok: true });
+    } finally {
+      knowledgeBase.close();
+    }
+  } catch (error) {
+    respondWithError(res, 500, 'DELETE /documents/:documentId', error, PublicError.DELETE_DOCUMENT_FAILED);
+  }
+});
+
+// 清空知识库
+router.delete('/documents', (_req, res) => {
+  try {
+    const knowledgeBase = new KnowledgeBase(getDatabasePath());
+    try {
+      knowledgeBase.clearAll();
+      res.json({ ok: true });
+    } finally {
+      knowledgeBase.close();
+    }
+  } catch (error) {
+    respondWithError(res, 500, 'DELETE /documents', error, PublicError.CLEAR_DOCUMENTS_FAILED);
   }
 });
 

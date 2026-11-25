@@ -10,7 +10,10 @@ describe('database schema', () => {
     const sql = exec.mock.calls[0]?.[0] as string;
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS sessions');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS messages');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS documents');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS document_chunks');
     expect(sql).toContain('idx_messages_session');
+    expect(sql).toContain('idx_document_chunks_document');
   });
 
   it('lists sessions with message_count and first_message', () => {

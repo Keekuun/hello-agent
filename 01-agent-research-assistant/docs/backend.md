@@ -539,7 +539,16 @@ export class FileTool implements Tool {
 
 ---
 
-## 6. 记忆系统 (memory.ts)
+## 6. 记忆系统 (memory.ts / memory-manager.ts)
+
+### 6.0 两层记忆
+
+| 层级 | 存储 | 作用 |
+|------|------|------|
+| **会话消息** | `messages` 表 | 当前会话多轮上下文 |
+| **长期记忆** | `memories` 表 | 对话后由 LLM 抽取要点，跨会话关键词检索注入 |
+
+相关 API：`GET /api/memories`、`DELETE /api/memories/:id`、`DELETE /api/memories`。
 
 ### 6.1 SQLite 记忆
 
@@ -570,6 +579,15 @@ export class SQLiteMemory implements Memory {
         key TEXT NOT NULL,
         value TEXT NOT NULL,
         PRIMARY KEY (session_id, key)
+      );
+
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        keywords TEXT,
+        importance INTEGER DEFAULT 5,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
   }

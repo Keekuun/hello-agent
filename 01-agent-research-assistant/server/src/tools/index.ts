@@ -1,4 +1,4 @@
-import { Tool } from '../agent/types';
+import { LLMToolDefinition, Tool } from '../agent/types';
 import { SearchTool } from './search';
 import { WikipediaTool } from './wikipedia';
 import { CalculatorTool } from './calculator';
@@ -35,5 +35,17 @@ export class ToolRegistry {
 
   getToolNames(): string[] {
     return Array.from(this.tools.keys());
+  }
+
+  /** 转为 OpenAI / DeepSeek 兼容的 tools 定义 */
+  toOpenAITools(): LLMToolDefinition[] {
+    return this.getAll().map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }));
   }
 }

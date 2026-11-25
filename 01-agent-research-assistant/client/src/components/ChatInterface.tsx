@@ -426,7 +426,7 @@ export function ChatInterface({
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
   const [pendingSteps, setPendingSteps] = useState<AgentStep[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [, setShowScrollButton] = useState(false);
   const [isSwitchingSession, setIsSwitchingSession] = useState(false);
   const [taskQueue, setTaskQueue] = useState<string[]>([]);
   const [showQueue, setShowQueue] = useState(false);

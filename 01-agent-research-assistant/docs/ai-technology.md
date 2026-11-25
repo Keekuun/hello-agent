@@ -167,64 +167,41 @@ const client = new OpenAI({
 
 ### 2.3 工具调用技术
 
-#### 2.3.1 当前方案：文本解析
+#### 2.3.1 当前方案：Function Calling + 文本回退
+
+默认走 OpenAI 兼容的原生工具调用；失败或不支持时回退到 ReAct 文本解析。
 
 ```typescript
-// LLM 输出格式
-Thought: 我需要搜索 Transformer 相关信息
-Action: web_search[{"query": "Transformer deep learning"}]
+const result = await llm.chatWithTools(messages, {
+  tools: toolRegistry.toOpenAITools(),
+  toolChoice: 'auto',
+});
 
-// 正则解析
+if (result.toolCalls?.[0]) {
+  // 执行结构化工具调用
+} else if (result.content) {
+  // 直接作为最终答案
+}
+```
+
+**优点**:
+- 结构化参数更稳定
+- 兼容 DeepSeek / OpenAI 等支持 tools 的模型
+- 不支持时仍可用文本解析
+
+**缺点**:
+- 依赖模型对 tools 的支持质量
+- 需要维护两套路径
+
+#### 2.3.2 文本解析（回退路径）
+
+```typescript
+// Thought: ...
+// Action: web_search[{"query": "Transformer deep learning"}]
 const actionMatch = response.match(/Action:\s*(\w+)\[([\s\S]+?)\]/s);
 ```
 
-**优点**:
-- 兼容所有 LLM
-- 无需额外 API 参数
-
-**缺点**:
-- 解析不稳定（LLM 输出格式可能变化）
-- 需要处理多种格式
-- 错误恢复困难
-
-#### 2.3.2 推荐方案：Function Calling
-
-```typescript
-// OpenAI 原生 Function Calling
-const completion = await openai.chat.completions.create({
-  model: 'gpt-4o',
-  messages: [{ role: 'user', content: '搜索 AI 新闻' }],
-  tools: [{
-    type: 'function',
-    function: {
-      name: 'web_search',
-      description: '搜索互联网',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: '搜索关键词' }
-        },
-        required: ['query']
-      }
-    }
-  }],
-  tool_choice: 'auto'
-});
-
-// 响应包含结构化的 tool_calls
-const toolCall = completion.choices[0].message.tool_calls[0];
-const args = JSON.parse(toolCall.function.arguments);
-```
-
-**优点**:
-- 结构化输出，无需解析
-- 可靠性高
-- 支持并行工具调用
-
-**缺点**:
-- 依赖 LLM 原生支持
-- 非所有模型可用
-
+用于本地小模型或不支持 Function Calling 的场景。
 ---
 
 ### 2.4 流式输出技术
@@ -436,11 +413,11 @@ User → Manager Agent → Researcher Agent → ...
 ### 4.2 升级路线建议
 
 ```
-当前方案 (ReAct + 文本解析)
+当前方案 (ReAct + Function Calling，文本解析回退)
     │
     ▼
 Phase 1: 核心增强
-    - Function Calling 替代文本解析
+    - ✅ Function Calling 替代文本解析（已完成，保留回退）
     - 添加 RAG 知识库
     - ✅ 错误重试机制（LLM / 工具，指数退避）
     │

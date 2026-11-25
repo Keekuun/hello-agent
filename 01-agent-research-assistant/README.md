@@ -5,6 +5,7 @@
 ## 功能
 
 - ReAct 推理循环（Thought → Action → Observation）
+- Function Calling：优先使用 LLM 原生工具调用，失败时回退文本解析
 - 工具：维基百科、计算器、文件读写、网络搜索（Serper，可选）
 - SQLite 会话记忆
 - React + SSE 实时进度
@@ -133,7 +134,7 @@ docker-compose up -d
 | ⭐⭐⭐ | 历史消息展示 | ✅ | 侧边栏显示历史会话列表，支持切换和继续 |
 | ⭐⭐ | 会话管理 | ✅ | 新建/删除/重命名会话 |
 | ⭐⭐ | 导出功能 | ✅ | 支持 Markdown 下载与 PDF（打印另存） |
-| ⭐⭐ | Function Calling | 待做 | 使用 LLM 原生工具调用替代文本解析 |
+| ⭐⭐ | Function Calling | ✅ | 已支持原生工具调用，文本解析作为回退 |
 | ⭐⭐ | 错误重试 | ✅ | LLM / 工具调用对网络波动与限流自动重试 |
 | ⭐ | RAG 知识库 | 待做 | 支持上传文档，基于文档问答 |
 | ⭐ | 多 Agent 协作 | 待做 | 研究员 + 编辑 + 审核员分工协作 |

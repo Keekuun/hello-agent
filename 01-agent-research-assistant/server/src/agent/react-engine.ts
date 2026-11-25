@@ -1,4 +1,10 @@
-import { AgentConfig, ReActStep } from './types';
+import {
+  AgentConfig,
+  ChatMessage,
+  LLMChatResult,
+  ReActStep,
+  ToolCallRequest,
+} from './types';
 import { ToolRegistry } from '../tools';
 import { getRetryConfigFromEnv, withRetry } from '../utils/retry';
 
@@ -8,6 +14,7 @@ export class ReActEngine {
   private maxIterations: number;
   private toolRetryAttempts: number;
   private toolRetryDelayMs: number;
+  private useFunctionCalling: boolean;
 
   constructor(config: AgentConfig) {
     this.config = config;
@@ -16,6 +23,7 @@ export class ReActEngine {
     const retryConfig = getRetryConfigFromEnv();
     this.toolRetryAttempts = retryConfig.maxAttempts;
     this.toolRetryDelayMs = retryConfig.initialDelayMs;
+    this.useFunctionCalling = config.useFunctionCalling !== false;
   }
 
   async run(
@@ -70,12 +78,154 @@ export class ReActEngine {
     memoryContext?: string,
     conversationContext?: string
   ): Promise<ReActStep> {
+    if (this.useFunctionCalling && typeof this.config.llm.chatWithTools === 'function') {
+      try {
+        return await this.generateStepWithTools(
+          task,
+          previousSteps,
+          memoryContext,
+          conversationContext
+        );
+      } catch (error) {
+        console.warn('Function Calling 失败，回退到文本解析:', error);
+      }
+    }
+
     const prompt = this.buildPrompt(task, previousSteps, memoryContext, conversationContext);
     const response = await this.config.llm.generate(prompt, {
       temperature: this.config.temperature ?? 0.7,
     });
 
     return this.parseResponse(response);
+  }
+
+  private async generateStepWithTools(
+    task: string,
+    previousSteps: ReActStep[],
+    memoryContext?: string,
+    conversationContext?: string
+  ): Promise<ReActStep> {
+    const messages = this.buildToolChatMessages(
+      task,
+      previousSteps,
+      memoryContext,
+      conversationContext
+    );
+
+    const result = await this.config.llm.chatWithTools!(messages, {
+      temperature: this.config.temperature ?? 0.7,
+      tools: this.tools.toOpenAITools(),
+      toolChoice: 'auto',
+    });
+
+    return this.stepFromToolResult(result);
+  }
+
+  private buildToolChatMessages(
+    task: string,
+    previousSteps: ReActStep[],
+    memoryContext?: string,
+    conversationContext?: string
+  ): ChatMessage[] {
+    const isContinuationTask = /继续|后续|不完整|没.*完整|接着说|补全|续写/i.test(task);
+
+    const systemParts = [
+      '你是一个智能研究助手。请通过工具收集信息，再给出清晰、结构化的最终答案。',
+      '需要外部信息时调用工具；信息足够时直接用自然语言回复最终答案，不要再调用工具。',
+      '若用户要求续写/继续，请直接续写，通常无需再调用工具。',
+    ];
+
+    if (memoryContext?.trim()) {
+      systemParts.push(memoryContext.trim());
+    }
+
+    if (conversationContext?.trim()) {
+      systemParts.push(`对话历史:\n${conversationContext.trim()}`);
+    }
+
+    if (isContinuationTask) {
+      systemParts.push('【续写任务】请优先直接输出续写内容。');
+    }
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemParts.join('\n\n') },
+      { role: 'user', content: `研究任务: ${task}` },
+    ];
+
+    for (const step of previousSteps) {
+      if (step.action) {
+        const toolCallId = step.action.toolCallId || `call_${step.action.tool}`;
+        messages.push({
+          role: 'assistant',
+          content: step.thought || null,
+          tool_calls: [
+            {
+              id: toolCallId,
+              name: step.action.tool,
+              arguments:
+                step.action.input &&
+                typeof step.action.input === 'object' &&
+                !Array.isArray(step.action.input)
+                  ? (step.action.input as Record<string, unknown>)
+                  : { value: step.action.input },
+            },
+          ],
+        });
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCallId,
+          content: JSON.stringify(step.observation ?? null),
+        });
+      } else if (step.finalAnswer) {
+        messages.push({
+          role: 'assistant',
+          content: step.finalAnswer,
+        });
+      } else if (step.thought) {
+        messages.push({
+          role: 'assistant',
+          content: step.thought,
+        });
+      }
+    }
+
+    return messages;
+  }
+
+  stepFromToolResult(result: LLMChatResult): ReActStep {
+    const toolCall = result.toolCalls?.[0];
+    if (toolCall) {
+      return this.stepFromToolCall(toolCall, result.content);
+    }
+
+    const content = (result.content ?? '').trim();
+    if (content) {
+      // 少数模型仍可能在 content 里写旧格式，兼容解析
+      if (/Action:\s*\w+/i.test(content) || /Final Answer:/i.test(content)) {
+        return this.parseResponse(content);
+      }
+
+      return {
+        thought: '基于已有信息给出最终答案',
+        finalAnswer: content,
+      };
+    }
+
+    return {
+      thought: '模型未返回有效内容',
+      finalAnswer: '抱歉，暂时无法生成有效回复，请重试。',
+    };
+  }
+
+  private stepFromToolCall(toolCall: ToolCallRequest, content: string | null): ReActStep {
+    return {
+      thought: (content && content.trim()) || `调用工具 ${toolCall.name}`,
+      action: {
+        tool: toolCall.name,
+        input: toolCall.arguments,
+        toolCallId: toolCall.id,
+      },
+    };
   }
 
   private buildPrompt(

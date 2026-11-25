@@ -30,6 +30,16 @@ export interface MemoryItem {
   created_at: string;
 }
 
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  filename: string;
+  mime_type: string;
+  content_length: number;
+  chunk_count: number;
+  created_at: string;
+}
+
 async function readPublicError(response: Response, fallback: string): Promise<string> {
   try {
     const data = (await response.json()) as { error?: string };
@@ -47,6 +57,7 @@ export function useAgent() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const initErrorShownRef = useRef(false);
 
@@ -184,9 +195,88 @@ export function useAgent() {
     }
   }, [fetchMemories]);
 
+  const fetchDocuments = useCallback(async () => {
+    const response = await fetch(`${API_BASE}/documents`);
+    if (!response.ok) {
+      throw new Error(await readPublicError(response, '无法加载知识库文档'));
+    }
+    const data = await response.json();
+    setDocuments(data as KnowledgeDocument[]);
+  }, []);
+
+  const uploadDocument = useCallback(async (file: File) => {
+    try {
+      const content = await file.text();
+      const response = await fetch(`${API_BASE}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: file.name.replace(/\.[^.]+$/, '') || file.name,
+          filename: file.name,
+          mimeType: file.type || 'text/plain',
+          content,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readPublicError(response, '上传文档失败，请稍后重试'));
+      }
+
+      await fetchDocuments();
+      toast.success(`已上传：${file.name}`);
+      return true;
+    } catch (err) {
+      const message = toUserMessage(err, '上传文档失败，请稍后重试');
+      console.error('Failed to upload document:', err);
+      toast.error(message);
+      return false;
+    }
+  }, [fetchDocuments]);
+
+  const deleteDocument = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/documents/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(await readPublicError(response, '删除文档失败，请稍后重试'));
+      }
+      await fetchDocuments();
+      toast.success('已删除文档');
+    } catch (err) {
+      const message = toUserMessage(err, '删除文档失败，请稍后重试');
+      console.error('Failed to delete document:', err);
+      toast.error(message);
+    }
+  }, [fetchDocuments]);
+
+  const clearDocuments = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/documents`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error(await readPublicError(response, '清空知识库失败，请稍后重试'));
+      }
+      await fetchDocuments();
+      toast.success('已清空知识库');
+    } catch (err) {
+      const message = toUserMessage(err, '清空知识库失败，请稍后重试');
+      console.error('Failed to clear documents:', err);
+      toast.error(message);
+    }
+  }, [fetchDocuments]);
+
   useEffect(() => {
     void (async () => {
-      const results = await Promise.allSettled([fetchSessions(), fetchSkills(), fetchMemories()]);
+      const results = await Promise.allSettled([
+        fetchSessions(),
+        fetchSkills(),
+        fetchMemories(),
+        fetchDocuments(),
+      ]);
       const failures = results.filter((result) => result.status === 'rejected');
       if (failures.length > 0 && !initErrorShownRef.current) {
         initErrorShownRef.current = true;
@@ -198,13 +288,14 @@ export function useAgent() {
         toast.error('服务暂时不可用，请稍后重试');
       }
     })();
-  }, [fetchSessions, fetchSkills, fetchMemories]);
+  }, [fetchSessions, fetchSkills, fetchMemories, fetchDocuments]);
 
   return {
     sessionId,
     sessions,
     skills,
     memories,
+    documents,
     error,
     createSession,
     switchSession,
@@ -214,5 +305,9 @@ export function useAgent() {
     fetchMemories,
     deleteMemory,
     clearMemories,
+    fetchDocuments,
+    uploadDocument,
+    deleteDocument,
+    clearDocuments,
   };
 }

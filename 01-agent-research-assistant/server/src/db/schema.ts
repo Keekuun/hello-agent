@@ -35,6 +35,26 @@ export function initializeDatabaseSchema(db: Database.Database): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'text/plain',
+      content_length INTEGER NOT NULL DEFAULT 0,
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS document_chunks (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      keywords TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_session
     ON messages(session_id, timestamp);
 
@@ -43,6 +63,15 @@ export function initializeDatabaseSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_memories_keywords
     ON memories(keywords);
+
+    CREATE INDEX IF NOT EXISTS idx_documents_created
+    ON documents(created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_document
+    ON document_chunks(document_id, chunk_index);
+
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_keywords
+    ON document_chunks(keywords);
   `);
 }
 

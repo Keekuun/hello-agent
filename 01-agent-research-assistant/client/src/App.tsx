@@ -9,6 +9,7 @@ export default function App() {
     sessions,
     skills,
     memories,
+    documents,
     error,
     createSession,
     switchSession,
@@ -18,6 +19,10 @@ export default function App() {
     fetchMemories,
     deleteMemory,
     clearMemories,
+    fetchDocuments,
+    uploadDocument,
+    deleteDocument,
+    clearDocuments,
   } = useAgent();
   
   const [steps, setSteps] = useState<AgentStep[]>([]);
@@ -62,7 +67,7 @@ export default function App() {
               智能研究助手 Agent
             </h1>
             <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              ReAct 推理 · 多轮对话 · 记忆功能
+              ReAct 推理 · 长期记忆 · 知识库 RAG
             </p>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -98,6 +103,7 @@ export default function App() {
           onSessionUpdate={() => {
             void fetchSessions();
             void fetchMemories();
+            void fetchDocuments();
           }}
         />
         <div className="hidden lg:block">
@@ -109,6 +115,7 @@ export default function App() {
             sessions={sessions}
             skills={skills}
             memories={memories}
+            documents={documents}
             onCreateSession={createSession}
             onSwitchSession={switchSession}
             onDeleteSession={deleteSession}
@@ -117,6 +124,10 @@ export default function App() {
             onDeleteMemory={deleteMemory}
             onClearMemories={clearMemories}
             onRefreshMemories={fetchMemories}
+            onUploadDocument={uploadDocument}
+            onDeleteDocument={deleteDocument}
+            onClearDocuments={clearDocuments}
+            onRefreshDocuments={fetchDocuments}
           />
         </div>
       </main>

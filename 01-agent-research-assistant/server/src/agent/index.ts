@@ -2,14 +2,16 @@ import { AgentConfig, Message, ReActStep } from './types';
 import { ReActEngine } from './react-engine';
 import { MemoryManager } from './memory-manager';
 import { SQLiteMemory } from './memory';
+import { KnowledgeBase } from '../knowledge/knowledge-base';
 
 export class ResearchAgent {
   private config: AgentConfig;
   private engine: ReActEngine;
   private sessionId: string;
   private memoryManager: MemoryManager;
+  private knowledgeDbPath: string | null;
 
-  constructor(config: AgentConfig, sessionId: string) {
+  constructor(config: AgentConfig, sessionId: string, knowledgeDbPath?: string) {
     this.config = config;
     this.sessionId = sessionId;
     this.engine = new ReActEngine(config);
@@ -17,6 +19,7 @@ export class ResearchAgent {
       config.memory as SQLiteMemory,
       config.llm
     );
+    this.knowledgeDbPath = knowledgeDbPath ?? null;
   }
 
   async execute(
@@ -33,9 +36,11 @@ export class ResearchAgent {
     });
 
     const memoryContext = await this.memoryManager.buildMemoryContext(task);
+    const knowledgeContext = this.buildKnowledgeContext(task);
+    const combinedContext = `${memoryContext}${knowledgeContext}`;
     const conversationContext = await this.buildConversationContext();
 
-    const result = await this.engine.run(task, onProgress, memoryContext, conversationContext);
+    const result = await this.engine.run(task, onProgress, combinedContext, conversationContext);
 
     await this.config.memory.addMessage({
       id: this.generateId(),
@@ -71,6 +76,22 @@ export class ResearchAgent {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  private buildKnowledgeContext(task: string): string {
+    if (!this.knowledgeDbPath) {
+      return '';
+    }
+
+    const knowledgeBase = new KnowledgeBase(this.knowledgeDbPath);
+    try {
+      return knowledgeBase.buildKnowledgeContext(task);
+    } catch (error) {
+      console.warn('Knowledge retrieval failed:', error);
+      return '';
+    } finally {
+      knowledgeBase.close();
+    }
   }
 
   private async buildConversationContext(): Promise<string> {

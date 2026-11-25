@@ -6,8 +6,9 @@
 
 - ReAct 推理循环（Thought → Action → Observation）
 - Function Calling：优先使用 LLM 原生工具调用，失败时回退文本解析
-- 工具：维基百科、计算器、文件读写、网络搜索（Serper，可选）
-- SQLite 会话记忆
+- 工具：维基百科、计算器、文件读写、网络搜索（Serper，可选）、知识库检索
+- SQLite 会话记忆 + 长期记忆
+- RAG 知识库：上传 txt/md/json/csv，切块检索并注入对话；也可主动调用 `knowledge_search`
 - React + SSE 实时进度
 - 流式 Markdown 渲染 + 打字机效果
 - 可折叠的推理步骤展示
@@ -136,7 +137,7 @@ docker-compose up -d
 | ⭐⭐ | 导出功能 | ✅ | 支持 Markdown 下载与 PDF（打印另存） |
 | ⭐⭐ | Function Calling | ✅ | 已支持原生工具调用，文本解析作为回退 |
 | ⭐⭐ | 错误重试 | ✅ | LLM / 工具调用对网络波动与限流自动重试 |
-| ⭐ | RAG 知识库 | 待做 | 支持上传文档，基于文档问答 |
+| ⭐ | RAG 知识库 | ✅ | 上传文档切块入库，关键词检索注入 + knowledge_search 工具 |
 | ⭐ | 多 Agent 协作 | 待做 | 研究员 + 编辑 + 审核员分工协作 |
 | ⭐ | 语音输入 | 待做 | 支持语音转文字输入 |
 

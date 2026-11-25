@@ -47,6 +47,7 @@
 | **打字机效果** | 最终答案逐字显示 + 实时 Markdown 渲染 |
 | **可折叠步骤展示** | 思考 / 工具调用 / 观察结果可展开收起 |
 | **持久化记忆** | SQLite 存储会话历史；长期记忆自动提取并跨会话检索注入 |
+| **RAG 知识库** | 上传文档切块入库，对话自动注入相关片段，并提供 `knowledge_search` 工具 |
 | **智能滚动** | 输出时自动滚动，用户上翻时暂停，支持一键回底 |
 | **Docker 部署** | 前后端独立容器，Nginx 反向代理 |
 
@@ -88,12 +89,15 @@
 │   │   │   ├── react-engine.ts     # ReAct 推理引擎
 │   │   │   ├── memory.ts           # SQLite 持久化记忆
 │   │   │   └── in-memory-memory.ts # 内存记忆（测试）
+│   │   ├── knowledge/
+│   │   │   └── knowledge-base.ts   # 文档切块与关键词检索
 │   │   ├── llm/openai-client.ts    # LLM 客户端封装
 │   │   └── tools/                  # 工具注册中心
 │   │       ├── index.ts
 │   │       ├── search.ts
 │   │       ├── wikipedia.ts
 │   │       ├── calculator.ts
+│   │       ├── knowledge-search.ts
 │   │       └── file.ts
 │   └── package.json
 │
@@ -134,7 +138,7 @@ cd client && pnpm install && pnpm dev
 
 | 阶段 | 重点 |
 |------|------|
-| **Phase 1** | Function Calling、RAG、错误重试（✅ 错误重试已完成） |
+| **Phase 1** | ✅ Function Calling、✅ RAG 知识库、✅ 错误重试 |
 | **Phase 2** | LangGraph、MCP 协议、向量数据库 |
 | **Phase 3** | 用户认证、监控日志、高可用部署 |
 | **Phase 4** | 多 Agent 协作、可视化编排、自动评估 |
